@@ -44,6 +44,12 @@ const App: React.FC = () => {
   const [onlinePlayers, setOnlinePlayers] = useState<Player[]>([]);
   const [onlineCount, setOnlineCount] = useState(0);
 
+  // Login State
+  const [showLoginModal, setShowLoginModal] = useState(true);
+  const [loginInput, setLoginInput] = useState('');
+  const [loginError, setLoginError] = useState('');
+  const [selectedAvatar, setSelectedAvatar] = useState<'○' | '△' | '□'>('○');
+
   // Game State
   const [status, setStatus] = useState<GameStatus>(GameStatus.LOBBY);
   const [currentGame, setCurrentGame] = useState<Game | null>(null);
@@ -71,25 +77,8 @@ const App: React.FC = () => {
   const scrollRef = useRef<HTMLDivElement>(null);
   const stopHeartbeatRef = useRef<(() => void) | null>(null);
 
-  // --- Initialize Player ---
+  // --- Cleanup on unmount ---
   useEffect(() => {
-    const initPlayer = async () => {
-      const nickname = `ИГРОК-${Math.floor(100 + Math.random() * 899)}`;
-      const avatars: ('○' | '△' | '□')[] = ['○', '△', '□'];
-      const avatar = avatars[Math.floor(Math.random() * avatars.length)];
-
-      const player = await PlayerService.createPlayer(nickname, avatar);
-      if (player) {
-        setCurrentPlayer(player);
-
-        // Start heartbeat to keep player online
-        stopHeartbeatRef.current = startHeartbeat(player.id);
-      }
-    };
-
-    initPlayer();
-
-    // Cleanup on unmount
     return () => {
       if (currentPlayer) {
         PlayerService.updateOnlineStatus(currentPlayer.id, false);
@@ -98,7 +87,7 @@ const App: React.FC = () => {
         stopHeartbeatRef.current();
       }
     };
-  }, []);
+  }, [currentPlayer]);
 
   // --- Load Online Players and Count ---
   useEffect(() => {
@@ -214,6 +203,45 @@ const App: React.FC = () => {
   }, [guesses]);
 
   // --- Handlers ---
+
+  const handleLoginSubmit = async () => {
+    const trimmedLogin = loginInput.trim();
+
+    // Валидация логина
+    if (trimmedLogin.length < 3) {
+      setLoginError('Логин должен быть минимум 3 символа');
+      return;
+    }
+
+    if (trimmedLogin.length > 20) {
+      setLoginError('Логин не должен превышать 20 символов');
+      return;
+    }
+
+    if (!/^[а-яА-ЯёЁa-zA-Z0-9_-]+$/.test(trimmedLogin)) {
+      setLoginError('Логин может содержать только буквы, цифры, _ и -');
+      return;
+    }
+
+    // Проверить доступность логина
+    const available = await PlayerService.isLoginAvailable(trimmedLogin);
+    if (!available) {
+      setLoginError('Этот логин уже занят');
+      return;
+    }
+
+    // Создать игрока
+    const player = await PlayerService.createPlayer(trimmedLogin, selectedAvatar);
+    if (player) {
+      setCurrentPlayer(player);
+      setShowLoginModal(false);
+
+      // Start heartbeat to keep player online
+      stopHeartbeatRef.current = startHeartbeat(player.id);
+    } else {
+      setLoginError('Ошибка создания профиля. Попробуйте снова.');
+    }
+  };
 
   const handleCreateGame = async () => {
     if (!currentPlayer) return;
@@ -368,7 +396,7 @@ const App: React.FC = () => {
     if (!currentGame) return '???';
     const opponentId = isCreator ? currentGame.opponent_id : currentGame.creator_id;
     const opponent = onlinePlayers.find(p => p.id === opponentId);
-    return opponent?.nickname || '???';
+    return opponent?.login || opponent?.nickname || '???';
   };
 
   const getOpponentAvatar = (): string => {
@@ -400,7 +428,7 @@ const App: React.FC = () => {
       <div className="flex flex-col items-center mb-4">
         <div className="text-xs text-gray-400 mb-1 flex items-center gap-2 uppercase">
           {isMine ? (
-            <span className="text-squid-green">ВЫ ({currentPlayer?.nickname})</span>
+            <span className="text-squid-green">ВЫ ({currentPlayer?.login || currentPlayer?.nickname})</span>
           ) : (
             <span className="text-squid-pink">{getOpponentNickname()}</span>
           )}
@@ -436,7 +464,7 @@ const App: React.FC = () => {
           ИГРА В<br/><span className="text-squid-pink">КАЛЬМАРА</span>
         </h1>
         <p className="text-squid-green font-mono text-xs tracking-widest">
-          ВАШ ID: {currentPlayer?.nickname} {currentPlayer?.avatar}
+          ВАШ ID: {currentPlayer?.login || currentPlayer?.nickname} {currentPlayer?.avatar}
         </p>
         <div className="text-yellow-400 font-mono text-sm">
           ОНЛАЙН: {onlineCount} игроков
@@ -471,7 +499,7 @@ const App: React.FC = () => {
                     <div className="flex items-center gap-3">
                       <div className="text-squid-pink font-bold text-xl">{creator?.avatar}</div>
                       <div>
-                        <div className="text-white text-sm font-bold">{creator?.nickname}</div>
+                        <div className="text-white text-sm font-bold">{creator?.login || creator?.nickname}</div>
                         <div className="text-[10px] text-gray-400">
                           {game.game_mode === 'NUMBERS' ? 'ЦИФРЫ' : 'СЛОВА'}
                         </div>
@@ -504,7 +532,7 @@ const App: React.FC = () => {
           {onlinePlayers.slice(0, 10).map((player) => (
             <div key={player.id} className="text-xs text-gray-500 flex items-center gap-1">
               <span>{player.avatar}</span>
-              <span>{player.nickname}</span>
+              <span>{player.login || player.nickname}</span>
             </div>
           ))}
           {onlinePlayers.length > 10 && (
@@ -699,17 +727,88 @@ const App: React.FC = () => {
     </div>
   );
 
-  if (!currentPlayer) {
+  // Login Modal
+  if (!currentPlayer && showLoginModal) {
     return (
-      <div className="min-h-screen bg-squid-dark flex items-center justify-center">
-        <div className="text-white text-xl font-mono">ПОДКЛЮЧЕНИЕ...</div>
+      <div className="min-h-screen bg-squid-dark flex items-center justify-center p-4">
+        <Modal>
+          <h1 className="text-3xl font-black text-center mb-2">
+            ИГРА В<br/><span className="text-squid-pink">КАЛЬМАРА</span>
+          </h1>
+          <p className="text-gray-400 text-sm text-center mb-6">
+            Выберите логин и аватар для входа
+          </p>
+
+          <div className="space-y-4">
+            {/* Login Input */}
+            <div>
+              <label className="text-xs text-gray-400 uppercase block mb-2">
+                Ваш логин:
+              </label>
+              <input
+                type="text"
+                value={loginInput}
+                onChange={(e) => {
+                  setLoginInput(e.target.value);
+                  setLoginError('');
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    handleLoginSubmit();
+                  }
+                }}
+                placeholder="Введите логин"
+                maxLength={20}
+                className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white text-sm focus:outline-none focus:border-squid-pink"
+                autoFocus
+              />
+              {loginError && (
+                <p className="text-red-500 text-xs mt-1">{loginError}</p>
+              )}
+              <p className="text-gray-600 text-xs mt-1">
+                3-20 символов, только буквы, цифры, _ и -
+              </p>
+            </div>
+
+            {/* Avatar Selection */}
+            <div>
+              <label className="text-xs text-gray-400 uppercase block mb-2">
+                Выберите аватар:
+              </label>
+              <div className="flex gap-3 justify-center">
+                {(['○', '△', '□'] as const).map((avatar) => (
+                  <button
+                    key={avatar}
+                    onClick={() => setSelectedAvatar(avatar)}
+                    className={`w-16 h-16 border-2 rounded flex items-center justify-center text-3xl transition-all ${
+                      selectedAvatar === avatar
+                        ? 'border-squid-pink bg-squid-pink/20 text-squid-pink'
+                        : 'border-gray-700 text-gray-500 hover:border-gray-500'
+                    }`}
+                  >
+                    {avatar}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Submit Button */}
+            <button
+              onClick={handleLoginSubmit}
+              disabled={loginInput.trim().length < 3}
+              className="w-full bg-squid-pink hover:bg-pink-700 disabled:bg-gray-700 disabled:cursor-not-allowed text-white font-bold py-3 px-4 rounded tracking-wider transition-colors"
+            >
+              ВОЙТИ В ИГРУ
+            </button>
+          </div>
+        </Modal>
       </div>
     );
   }
 
   return (
     <div className="bg-squid-dark min-h-screen text-white overflow-hidden font-sans">
-      {status === GameStatus.LOBBY ? renderLobby() : renderGame()}
+      {currentPlayer && (status === GameStatus.LOBBY ? renderLobby() : renderGame())}
     </div>
   );
 };
