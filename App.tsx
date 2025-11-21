@@ -702,62 +702,124 @@ const App: React.FC = () => {
     </div>
   );
 
-  const renderGame = () => (
-    <div className="min-h-screen flex flex-col max-w-4xl mx-auto p-4 relative">
-      <div className="flex gap-4 h-screen">
-        {/* Left Side - Game Board */}
-        <div className="flex-1 flex flex-col">
-          {/* Header */}
-          <div className="flex justify-between items-center py-4 border-b border-gray-800 mb-4">
-            <div className="flex gap-2 items-center">
-              <span className="text-squid-pink text-xl">{getOpponentAvatar()}</span>
-              <span className="text-sm text-gray-400">{getOpponentNickname()}</span>
-            </div>
-            <div className="font-mono text-xs text-gray-400">
-              {currentGame?.prize && <span className="text-yellow-400 mr-2">💰 {currentGame.prize}</span>}
-              РАУНД {currentGame?.turn_count || 0}
-            </div>
-            <button onClick={handleBackToLobby} className="text-xs text-red-500 font-bold hover:underline uppercase">
-              Выход
-            </button>
-          </div>
+  const renderGame = () => {
+    // Helper function to render guess with colored squares
+    const renderGuessSquares = (guess: Guess, targetSecret: string) => {
+      const guessChars = guess.guess.split('');
+      const secretChars = targetSecret.split('');
 
-          {/* Info Banner */}
-          <div className="bg-squid-panel border-l-4 border-squid-pink p-3 mb-4 font-mono text-sm text-center shadow-lg text-white">
-            {feedback}
-          </div>
-
-          {/* Game Board */}
-          <div className="flex-1 overflow-y-auto mb-4">
-            {/* Opponent Display */}
-            {status !== GameStatus.SETUP && renderSecretDisplay(false)}
-
-            {/* User Display */}
-            {renderSecretDisplay(true)}
-          </div>
-
-          {/* Controls Area */}
-          <div className="mt-auto bg-squid-dark pt-2 pb-4 sticky bottom-0 z-10">
-            {status === GameStatus.PLAYING && (
-              <Timer
-                duration={TURN_DURATION}
-                onTimeUp={handleTimeUp}
-                isActive={true}
-                resetKey={timerResetKey}
-              />
-            )}
-
-            {/* Input Display */}
-            {((status === GameStatus.PLAYING && currentGame?.current_turn === currentPlayer?.id) || status === GameStatus.SETUP) && (
-              <div className="flex justify-center gap-2 mb-4">
-                {Array.from({ length: gameMode === GameMode.NUMBERS ? NUM_LENGTH : WORD_LENGTH }).map((_, i) => (
-                  <div key={i} className="w-8 h-10 sm:w-10 sm:h-12 border-b-2 border-white flex items-center justify-center text-xl font-mono text-white">
-                    {currentInput[i] || ''}
-                  </div>
-                ))}
+      return (
+        <div className="flex gap-1 justify-center">
+          {guessChars.map((char, idx) => {
+            const isMatch = char === secretChars[idx];
+            return (
+              <div
+                key={idx}
+                className={`w-8 h-8 sm:w-10 sm:h-10 border-2 flex items-center justify-center text-sm sm:text-base font-bold rounded transition-all ${
+                  isMatch
+                    ? 'bg-squid-green/30 border-squid-green text-squid-green'
+                    : 'bg-gray-800 border-gray-600 text-gray-400'
+                }`}
+              >
+                {char}
               </div>
-            )}
+            );
+          })}
+        </div>
+      );
+    };
 
+    const mySecret = isCreator ? currentGame?.creator_secret : currentGame?.opponent_secret;
+    const opponentSecretValue = isCreator ? currentGame?.opponent_secret : currentGame?.creator_secret;
+
+    return (
+      <div className="min-h-screen flex flex-col mx-auto p-4 relative max-w-2xl">
+        {/* Header */}
+        <div className="flex justify-between items-center py-3 border-b border-gray-800 mb-3">
+          <div className="flex gap-2 items-center">
+            <span className="text-squid-pink text-xl">{getOpponentAvatar()}</span>
+            <span className="text-sm text-gray-400">{getOpponentNickname()}</span>
+          </div>
+          <div className="font-mono text-xs text-gray-400">
+            {currentGame?.prize && <span className="text-yellow-400 mr-2">💰 {currentGame.prize}</span>}
+            РАУНД {currentGame?.turn_count || 0}
+          </div>
+          <button onClick={handleBackToLobby} className="text-xs text-red-500 font-bold hover:underline uppercase">
+            Выход
+          </button>
+        </div>
+
+        {/* Info Banner */}
+        <div className="bg-squid-panel border-l-4 border-squid-pink p-2 mb-3 font-mono text-sm text-center shadow-lg text-white">
+          {feedback}
+        </div>
+
+        {/* Secrets Display */}
+        <div className="mb-3">
+          {status !== GameStatus.SETUP && renderSecretDisplay(false)}
+          {renderSecretDisplay(true)}
+        </div>
+
+        {/* History - scrollable area above keyboard */}
+        <div className="flex-1 overflow-y-auto mb-3 border border-gray-800 rounded bg-gray-900/30 p-3" ref={scrollRef} style={{ maxHeight: 'calc(100vh - 550px)', minHeight: '200px' }}>
+          <h3 className="text-xs font-bold text-gray-500 mb-3 uppercase sticky top-0 bg-gray-900 pb-2">
+            📊 История отгадываний
+          </h3>
+          {guesses.length === 0 ? (
+            <div className="text-center text-gray-600 text-xs py-8">
+              История пуста<br/>Начните угадывать!
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {guesses.map((guess, idx) => {
+                const isMine = guess.player_id === currentPlayer?.id;
+                const targetSecret = isMine ? (opponentSecretValue || '') : (mySecret || '');
+
+                return (
+                  <div key={guess.id || idx} className="bg-gray-800/50 rounded p-2 border border-gray-700">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className={`text-xs font-bold ${isMine ? 'text-squid-green' : 'text-squid-pink'}`}>
+                        {isMine ? `ВЫ (${currentPlayer?.login})` : getOpponentNickname()}
+                      </span>
+                      <span className="text-xs text-gray-500">
+                        #{idx + 1}
+                      </span>
+                    </div>
+                    {renderGuessSquares(guess, targetSecret)}
+                    <div className="text-xs text-center mt-2 font-mono text-gray-400">
+                      {guess.result}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Controls Area - Fixed at bottom */}
+        <div className="bg-squid-dark pt-2 pb-4">
+          {status === GameStatus.PLAYING && (
+            <Timer
+              duration={TURN_DURATION}
+              onTimeUp={handleTimeUp}
+              isActive={true}
+              resetKey={timerResetKey}
+            />
+          )}
+
+          {/* Input Display */}
+          {((status === GameStatus.PLAYING && currentGame?.current_turn === currentPlayer?.id) || status === GameStatus.SETUP) && (
+            <div className="flex justify-center gap-2 mb-4">
+              {Array.from({ length: gameMode === GameMode.NUMBERS ? NUM_LENGTH : WORD_LENGTH }).map((_, i) => (
+                <div key={i} className="w-10 h-12 border-b-2 border-white flex items-center justify-center text-xl font-mono text-white">
+                  {currentInput[i] || ''}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Full-width keyboard */}
+          <div className="w-full">
             <Keyboard
               mode={gameMode === GameMode.NUMBERS ? 'NUMERIC' : 'ALPHA'}
               onInput={handleInput}
@@ -769,72 +831,42 @@ const App: React.FC = () => {
           </div>
         </div>
 
-        {/* Right Side - Chat History in Frame */}
-        <div className="w-80 border-l border-gray-800 pl-4 flex flex-col">
-          <h3 className="text-sm font-bold text-gray-400 mb-3 uppercase">История отгадываний</h3>
-
-          <div ref={scrollRef} className="flex-1 overflow-y-auto space-y-2 pr-2">
-            {guesses.length === 0 ? (
-              <div className="text-center text-gray-600 text-xs py-8">
-                История пуста<br/>Начните угадывать!
-              </div>
-            ) : (
-              guesses.map((guess, idx) => {
-                const isMine = guess.player_id === currentPlayer?.id;
-                return (
-                  <div key={idx} className={`flex ${isMine ? 'justify-end' : 'justify-start'}`}>
-                    <div className={`
-                      p-2 rounded max-w-[85%] text-xs font-mono
-                      ${isMine ? 'bg-squid-green/20 text-squid-green border border-squid-green/50' : 'bg-squid-pink/20 text-squid-pink border border-squid-pink/50'}
-                    `}>
-                      <div className="opacity-70 mb-1">
-                        {isMine ? 'ВЫ' : getOpponentNickname()}: {guess.guess}
-                      </div>
-                      <div className="font-bold">{guess.result}</div>
-                    </div>
-                  </div>
-                );
-              })
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Game Over Modal */}
-      {status === GameStatus.GAME_OVER && currentGame && (
-        <Modal>
-          <div className="text-center space-y-6">
-            <h2 className={`text-3xl font-black ${currentGame.winner_id === currentPlayer?.id ? 'text-squid-green' : 'text-squid-pink'}`}>
-              {currentGame.winner_id === currentPlayer?.id ? 'ПОБЕДА' : 'ВЫБЫЛ'}
-            </h2>
-            <p className="font-mono text-sm text-gray-300">
-              {currentGame.winner_id === currentPlayer?.id
-                ? 'ВЫ РАЗГАДАЛИ КОД!'
-                : 'ОППОНЕНТ ОКАЗАЛСЯ БЫСТРЕЕ.'}
-            </p>
-            {currentGame.prize && currentGame.winner_id === currentPlayer?.id && (
-              <div className="p-4 bg-yellow-900/30 border border-yellow-600 rounded">
-                <p className="text-yellow-400 font-bold text-lg">🏆 ВЫ ВЫИГРАЛИ</p>
-                <p className="text-yellow-300 text-xl mt-2">{currentGame.prize}</p>
-              </div>
-            )}
-            <div className="p-4 bg-black/50 rounded border border-gray-700">
-              <p className="text-xs text-gray-500 mb-1">СЕКРЕТ {getOpponentNickname()}</p>
-              <p className="text-xl tracking-widest text-squid-pink">
-                {isCreator ? currentGame.opponent_secret : currentGame.creator_secret}
+        {/* Game Over Modal */}
+        {status === GameStatus.GAME_OVER && currentGame && (
+          <Modal>
+            <div className="text-center space-y-6">
+              <h2 className={`text-3xl font-black ${currentGame.winner_id === currentPlayer?.id ? 'text-squid-green' : 'text-squid-pink'}`}>
+                {currentGame.winner_id === currentPlayer?.id ? 'ПОБЕДА' : 'ВЫБЫЛ'}
+              </h2>
+              <p className="font-mono text-sm text-gray-300">
+                {currentGame.winner_id === currentPlayer?.id
+                  ? 'ВЫ РАЗГАДАЛИ КОД!'
+                  : 'ОППОНЕНТ ОКАЗАЛСЯ БЫСТРЕЕ.'}
               </p>
+              {currentGame.prize && currentGame.winner_id === currentPlayer?.id && (
+                <div className="p-4 bg-yellow-900/30 border border-yellow-600 rounded">
+                  <p className="text-yellow-400 font-bold text-lg">🏆 ВЫ ВЫИГРАЛИ</p>
+                  <p className="text-yellow-300 text-xl mt-2">{currentGame.prize}</p>
+                </div>
+              )}
+              <div className="p-4 bg-black/50 rounded border border-gray-700">
+                <p className="text-xs text-gray-500 mb-1">СЕКРЕТ {getOpponentNickname()}</p>
+                <p className="text-xl tracking-widest text-squid-pink">
+                  {isCreator ? currentGame.opponent_secret : currentGame.creator_secret}
+                </p>
+              </div>
+              <button
+                onClick={handleBackToLobby}
+                className="w-full py-3 bg-white text-black font-bold hover:bg-gray-200 transition-colors rounded"
+              >
+                ВЕРНУТЬСЯ В МЕНЮ
+              </button>
             </div>
-            <button
-              onClick={handleBackToLobby}
-              className="w-full py-3 bg-white text-black font-bold hover:bg-gray-200 transition-colors rounded"
-            >
-              ВЕРНУТЬСЯ В МЕНЮ
-            </button>
-          </div>
-        </Modal>
-      )}
-    </div>
-  );
+          </Modal>
+        )}
+      </div>
+    );
+  };
 
   // Login Modal
   if (isLoadingSession) {
