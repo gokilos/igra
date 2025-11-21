@@ -10,7 +10,8 @@ import {
   Player,
   Game,
   Guess,
-  startHeartbeat
+  startHeartbeat,
+  supabase
 } from './services/supabase';
 
 // --- Constants ---
@@ -45,10 +46,11 @@ const App: React.FC = () => {
   const [onlineCount, setOnlineCount] = useState(0);
 
   // Login State
-  const [showLoginModal, setShowLoginModal] = useState(true);
+  const [showLoginModal, setShowLoginModal] = useState(false);
   const [loginInput, setLoginInput] = useState('');
   const [loginError, setLoginError] = useState('');
   const [selectedAvatar, setSelectedAvatar] = useState<'○' | '△' | '□'>('○');
+  const [isLoadingSession, setIsLoadingSession] = useState(true);
 
   // Game State
   const [status, setStatus] = useState<GameStatus>(GameStatus.LOBBY);
@@ -76,6 +78,49 @@ const App: React.FC = () => {
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const stopHeartbeatRef = useRef<(() => void) | null>(null);
+
+  // --- Restore session from localStorage ---
+  useEffect(() => {
+    const restoreSession = async () => {
+      const savedPlayerId = localStorage.getItem('squid_player_id');
+
+      if (savedPlayerId) {
+        // Try to get player from database
+        const { data, error } = await supabase
+          .from('players')
+          .select('*')
+          .eq('id', savedPlayerId)
+          .single();
+
+        if (data && !error) {
+          // Update online status
+          await PlayerService.updateOnlineStatus(data.id, true);
+          setCurrentPlayer(data);
+          setShowLoginModal(false);
+
+          // Start heartbeat
+          stopHeartbeatRef.current = startHeartbeat(data.id);
+        } else {
+          // Player not found, clear localStorage
+          localStorage.removeItem('squid_player_id');
+          setShowLoginModal(true);
+        }
+      } else {
+        setShowLoginModal(true);
+      }
+
+      setIsLoadingSession(false);
+    };
+
+    restoreSession();
+  }, []);
+
+  // --- Save player to localStorage when set ---
+  useEffect(() => {
+    if (currentPlayer?.id) {
+      localStorage.setItem('squid_player_id', currentPlayer.id);
+    }
+  }, [currentPlayer?.id]);
 
   // --- Cleanup on unmount ---
   useEffect(() => {
@@ -119,7 +164,8 @@ const App: React.FC = () => {
   useEffect(() => {
     const loadWaitingGames = async () => {
       const games = await GameService.getWaitingGames();
-      setWaitingGames(games.filter(g => g.creator_id !== currentPlayer?.id));
+      // Показываем ВСЕ игры в статусе WAITING (не фильтруем свои)
+      setWaitingGames(games);
     };
 
     if (currentPlayer && status === GameStatus.LOBBY) {
@@ -127,7 +173,8 @@ const App: React.FC = () => {
 
       // Subscribe to lobby games
       const channel = GameService.subscribeToLobbyGames((games) => {
-        setWaitingGames(games.filter(g => g.creator_id !== currentPlayer?.id));
+        // Показываем ВСЕ игры в статусе WAITING
+        setWaitingGames(games);
       });
 
       return () => {
@@ -390,6 +437,20 @@ const App: React.FC = () => {
     setOpponentRevealedIndices([]);
   };
 
+  const handleLogout = () => {
+    if (currentPlayer) {
+      PlayerService.updateOnlineStatus(currentPlayer.id, false);
+    }
+    if (stopHeartbeatRef.current) {
+      stopHeartbeatRef.current();
+    }
+    localStorage.removeItem('squid_player_id');
+    setCurrentPlayer(null);
+    setShowLoginModal(true);
+    setStatus(GameStatus.LOBBY);
+    setCurrentGame(null);
+  };
+
   // --- Render Helpers ---
 
   const getOpponentNickname = (): string => {
@@ -493,31 +554,42 @@ const App: React.FC = () => {
           ) : (
             waitingGames.map((game) => {
               const creator = onlinePlayers.find(p => p.id === game.creator_id);
+              const isMyGame = game.creator_id === currentPlayer?.id;
+
               return (
-                <div key={game.id} className="bg-squid-panel border border-gray-700 p-3 rounded">
+                <div key={game.id} className={`bg-squid-panel border p-3 rounded ${isMyGame ? 'border-squid-green' : 'border-gray-700'}`}>
                   <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center gap-3">
-                      <div className="text-squid-pink font-bold text-xl">{creator?.avatar}</div>
+                      <div className="text-squid-pink font-bold text-xl">{creator?.avatar || '?'}</div>
                       <div>
-                        <div className="text-white text-sm font-bold">{creator?.login || creator?.nickname}</div>
+                        <div className="text-white text-sm font-bold">
+                          {creator?.login || creator?.nickname || 'Игрок'}
+                          {isMyGame && <span className="text-squid-green text-xs ml-2">(ваша игра)</span>}
+                        </div>
                         <div className="text-[10px] text-gray-400">
-                          {game.game_mode === 'NUMBERS' ? 'ЦИФРЫ' : 'СЛОВА'}
+                          {game.game_mode === 'NUMBERS' ? '🔢 ЦИФРЫ' : '📝 СЛОВА'}
                         </div>
                       </div>
                     </div>
                   </div>
                   {game.prize && (
                     <div className="bg-yellow-900/30 border border-yellow-600/50 rounded px-2 py-1 mb-2">
-                      <div className="text-[9px] text-yellow-600 font-bold">ПРИЗ:</div>
+                      <div className="text-[9px] text-yellow-600 font-bold">🏆 ПРИЗ:</div>
                       <div className="text-xs text-yellow-400">{game.prize}</div>
                     </div>
                   )}
-                  <button
-                    onClick={() => handleJoinGame(game)}
-                    className="w-full bg-squid-green hover:bg-green-700 text-black text-sm px-3 py-2 rounded font-bold tracking-wider"
-                  >
-                    ВСТУПИТЬ В ИГРУ
-                  </button>
+                  {!isMyGame ? (
+                    <button
+                      onClick={() => handleJoinGame(game)}
+                      className="w-full bg-squid-green hover:bg-green-700 text-black text-sm px-3 py-2 rounded font-bold tracking-wider"
+                    >
+                      ВСТУПИТЬ В ИГРУ
+                    </button>
+                  ) : (
+                    <div className="text-center text-xs text-gray-500 py-2">
+                      Ожидание оппонента...
+                    </div>
+                  )}
                 </div>
               );
             })
@@ -525,19 +597,30 @@ const App: React.FC = () => {
         </div>
       </div>
 
-      {/* Online Players */}
-      <div className="max-h-32 overflow-y-auto bg-gray-900/30 border border-gray-800 rounded p-2">
-        <h3 className="text-[10px] font-mono text-gray-600 mb-2">ОНЛАЙН ИГРОКИ:</h3>
-        <div className="flex flex-wrap gap-2">
-          {onlinePlayers.slice(0, 10).map((player) => (
-            <div key={player.id} className="text-xs text-gray-500 flex items-center gap-1">
-              <span>{player.avatar}</span>
-              <span>{player.login || player.nickname}</span>
+      {/* Online Players - показываем рядом */}
+      <div className="bg-gray-900/30 border border-gray-800 rounded p-3 mb-4">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-xs font-mono text-gray-500">ОНЛАЙН ИГРОКИ</h3>
+          <button
+            onClick={handleLogout}
+            className="text-xs text-red-400 hover:text-red-300 font-mono"
+          >
+            ВЫЙТИ
+          </button>
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+          {onlinePlayers.slice(0, 12).map((player) => (
+            <div key={player.id} className="text-xs bg-gray-800/50 rounded px-2 py-1 flex items-center gap-2">
+              <span className="text-base">{player.avatar}</span>
+              <span className="text-gray-400 truncate">{player.login || player.nickname}</span>
             </div>
           ))}
-          {onlinePlayers.length > 10 && (
-            <div className="text-xs text-gray-600">+{onlinePlayers.length - 10} еще</div>
-          )}
+        </div>
+        {onlinePlayers.length > 12 && (
+          <div className="text-xs text-gray-600 text-center mt-2">
+            +{onlinePlayers.length - 12} еще
+          </div>
+        )}
         </div>
       </div>
 
@@ -728,6 +811,14 @@ const App: React.FC = () => {
   );
 
   // Login Modal
+  if (isLoadingSession) {
+    return (
+      <div className="min-h-screen bg-squid-dark flex items-center justify-center">
+        <div className="text-white text-xl font-mono animate-pulse">ЗАГРУЗКА...</div>
+      </div>
+    );
+  }
+
   if (!currentPlayer && showLoginModal) {
     return (
       <div className="min-h-screen bg-squid-dark flex items-center justify-center p-4">
