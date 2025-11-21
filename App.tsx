@@ -17,7 +17,7 @@ import {
 // --- Constants ---
 const NUM_LENGTH = 4;
 const WORD_LENGTH = 5;
-const TURN_DURATION = 60; // 60 seconds
+const TURN_DURATION = 120; // 120 seconds (2 minutes)
 
 // --- Helper Components ---
 
@@ -187,6 +187,7 @@ const App: React.FC = () => {
   useEffect(() => {
     if (currentGame?.id) {
       const channel = GameService.subscribeToGame(currentGame.id, async (game) => {
+        console.log('Game update received:', game);
         setCurrentGame(game);
 
         // Check if both players are ready to start
@@ -199,9 +200,14 @@ const App: React.FC = () => {
         }
 
         // Update game status
-        if (game.status === 'PLAYING' && status !== GameStatus.PLAYING) {
-          setStatus(GameStatus.PLAYING);
-          setFeedback(game.current_turn === currentPlayer?.id ? 'ТВОЙ ХОД' : 'ХОД ОППОНЕНТА');
+        if (game.status === 'PLAYING') {
+          if (status !== GameStatus.PLAYING) {
+            setStatus(GameStatus.PLAYING);
+          }
+
+          // Update feedback and timer on turn change
+          const isMyTurn = game.current_turn === currentPlayer?.id;
+          setFeedback(isMyTurn ? 'ТВОЙ ХОД' : 'ХОД ОППОНЕНТА');
           setTimerResetKey(k => k + 1);
         }
 
@@ -210,30 +216,44 @@ const App: React.FC = () => {
           setStatus(GameStatus.GAME_OVER);
         }
 
-        // Update revealed indices
+        // Update revealed indices and secrets
         const amCreator = game.creator_id === currentPlayer?.id;
         setMyRevealedIndices(amCreator ? game.creator_revealed_indices : game.opponent_revealed_indices);
         setOpponentRevealedIndices(amCreator ? game.opponent_revealed_indices : game.creator_revealed_indices);
+
+        // Update secrets if they exist
+        if (game.creator_secret && game.opponent_secret) {
+          setMySecret(amCreator ? game.creator_secret : game.opponent_secret);
+          setOpponentSecret(amCreator ? game.opponent_secret : game.creator_secret);
+        }
       });
 
       return () => {
         channel.unsubscribe();
       };
     }
-  }, [currentGame?.id, currentPlayer?.id, status]);
+  }, [currentGame?.id, currentPlayer?.id]);
 
   // --- Subscribe to Guesses ---
   useEffect(() => {
     if (currentGame?.id) {
       const loadGuesses = async () => {
         const gameGuesses = await GuessService.getGameGuesses(currentGame.id);
+        console.log('Loaded guesses:', gameGuesses);
         setGuesses(gameGuesses);
       };
 
       loadGuesses();
 
       const channel = GuessService.subscribeToGuesses(currentGame.id, (guess) => {
-        setGuesses(prev => [...prev, guess]);
+        console.log('New guess received:', guess);
+        setGuesses(prev => {
+          // Избегаем дублирования
+          if (prev.some(g => g.id === guess.id)) {
+            return prev;
+          }
+          return [...prev, guess];
+        });
       });
 
       return () => {
@@ -353,6 +373,8 @@ const App: React.FC = () => {
     if (currentInput.length !== len) return;
     if (currentGame.current_turn !== currentPlayer.id) return;
 
+    console.log('Submitting guess:', currentInput);
+
     // Get opponent's secret
     const game = await GameService.getGame(currentGame.id);
     if (!game) return;
@@ -376,22 +398,26 @@ const App: React.FC = () => {
       }
     }
 
+    console.log('Match count:', matchCount, 'Is win:', isWin);
+
     // Update revealed indices
     await GameService.updateRevealedIndices(currentGame.id, currentPlayer.id, newRevealed, !isCreator);
 
     // Add guess to history
     const resultText = isWin ? 'ВЕРНО!' : (matchCount > 0 ? `ОТКРЫТО: ${matchCount}` : 'НЕТ СОВПАДЕНИЙ');
-    await GuessService.addGuess(currentGame.id, currentPlayer.id, guess, resultText, matchCount);
+    const guessResult = await GuessService.addGuess(currentGame.id, currentPlayer.id, guess, resultText, matchCount);
+    console.log('Guess added to DB:', guessResult);
 
     if (isWin) {
+      console.log('Game won! Finishing game...');
       await GameService.finishGame(currentGame.id, currentPlayer.id);
     } else {
       // Switch turn
       const nextPlayer = isCreator ? game.opponent_id : game.creator_id;
       if (nextPlayer) {
+        console.log('Switching turn to:', nextPlayer);
         await GameService.switchTurn(currentGame.id, nextPlayer);
       }
-      setTimerResetKey(k => k + 1);
     }
 
     setCurrentInput('');
