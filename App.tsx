@@ -665,11 +665,11 @@ const App: React.FC = () => {
           </div>
         )}
         </div>
-      </div>
 
       <div className="text-center text-gray-600 text-[10px] font-mono mt-2">
         СЕРВЕР: ХАКАСИЯ-1 • ПОДКЛЮЧЕНИЕ СТАБИЛЬНО
       </div>
+      
 
       {/* Create Game Modal */}
       {showCreateGameModal && (
