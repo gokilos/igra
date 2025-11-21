@@ -76,6 +76,9 @@ const App: React.FC = () => {
   // Timer State
   const [timerResetKey, setTimerResetKey] = useState(0);
 
+  // Submit State
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
   const scrollRef = useRef<HTMLDivElement>(null);
   const stopHeartbeatRef = useRef<(() => void) | null>(null);
 
@@ -347,27 +350,32 @@ const App: React.FC = () => {
   };
 
   const handleSetupSubmit = async () => {
-    if (!currentPlayer || !currentGame) return;
+    if (!currentPlayer || !currentGame || isSubmitting) return;
 
     const len = gameMode === GameMode.NUMBERS ? NUM_LENGTH : WORD_LENGTH;
     if (currentInput.length !== len) return;
 
-    setMySecret(currentInput);
-    await GameService.setPlayerSecret(currentGame.id, currentPlayer.id, currentInput, isCreator);
+    setIsSubmitting(true);
+    try {
+      setMySecret(currentInput);
+      await GameService.setPlayerSecret(currentGame.id, currentPlayer.id, currentInput, isCreator);
 
-    setFeedback('ОЖИДАНИЕ ОППОНЕНТА...');
-    setCurrentInput('');
+      setFeedback('ОЖИДАНИЕ ОППОНЕНТА...');
+      setCurrentInput('');
 
-    // Check if both players are ready
-    const ready = await GameService.checkBothPlayersReady(currentGame.id);
-    if (ready && isCreator) {
-      // Creator starts the game
-      await GameService.startGame(currentGame.id, currentPlayer.id);
+      // Check if both players are ready
+      const ready = await GameService.checkBothPlayersReady(currentGame.id);
+      if (ready && isCreator) {
+        // Creator starts the game
+        await GameService.startGame(currentGame.id, currentPlayer.id);
+      }
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   const handleSubmitGuess = async () => {
-    if (!currentPlayer || !currentGame) return;
+    if (!currentPlayer || !currentGame || isSubmitting) return;
 
     const len = gameMode === GameMode.NUMBERS ? NUM_LENGTH : WORD_LENGTH;
     if (currentInput.length !== len) return;
@@ -375,52 +383,61 @@ const App: React.FC = () => {
 
     console.log('Submitting guess:', currentInput);
 
-    // Get opponent's secret
-    const game = await GameService.getGame(currentGame.id);
-    if (!game) return;
+    setIsSubmitting(true);
+    try {
+      // Get opponent's secret
+      const game = await GameService.getGame(currentGame.id);
+      if (!game) return;
 
-    const targetSecret = isCreator ? game.opponent_secret : game.creator_secret;
-    if (!targetSecret) return;
+      const targetSecret = isCreator ? game.opponent_secret : game.creator_secret;
+      if (!targetSecret) return;
 
-    const guess = currentInput;
-    let matchCount = 0;
-    const isWin = guess === targetSecret;
-    let newRevealed = isCreator ? [...game.opponent_revealed_indices] : [...game.creator_revealed_indices];
+      const guess = currentInput;
+      let matchCount = 0;
+      const isWin = guess === targetSecret;
+      let newRevealed = isCreator ? [...game.opponent_revealed_indices] : [...game.creator_revealed_indices];
+      const oldRevealed = [...newRevealed]; // Сохраняем старое состояние для подсчета НОВЫХ совпадений
 
-    if (isWin) {
-      newRevealed = newRevealed.map(() => true);
-    } else {
-      for (let i = 0; i < targetSecret.length; i++) {
-        if (guess[i] === targetSecret[i]) {
-          newRevealed[i] = true;
-          matchCount++;
+      if (isWin) {
+        newRevealed = newRevealed.map(() => true);
+      } else {
+        for (let i = 0; i < targetSecret.length; i++) {
+          if (guess[i] === targetSecret[i]) {
+            // Считаем только если это НОВОЕ совпадение (не было угадано ранее)
+            if (!oldRevealed[i]) {
+              matchCount++;
+            }
+            newRevealed[i] = true;
+          }
         }
       }
-    }
 
-    console.log('Match count:', matchCount, 'Is win:', isWin);
+      console.log('Match count (NEW matches only):', matchCount, 'Is win:', isWin);
 
-    // Update revealed indices
-    await GameService.updateRevealedIndices(currentGame.id, currentPlayer.id, newRevealed, !isCreator);
+      // Update revealed indices
+      await GameService.updateRevealedIndices(currentGame.id, currentPlayer.id, newRevealed, !isCreator);
 
-    // Add guess to history
-    const resultText = isWin ? 'ВЕРНО!' : (matchCount > 0 ? `ОТКРЫТО: ${matchCount}` : 'НЕТ СОВПАДЕНИЙ');
-    const guessResult = await GuessService.addGuess(currentGame.id, currentPlayer.id, guess, resultText, matchCount);
-    console.log('Guess added to DB:', guessResult);
+      // Add guess to history
+      const resultText = isWin ? 'ВЕРНО!' : (matchCount > 0 ? `ОТКРЫТО: ${matchCount}` : 'НЕТ СОВПАДЕНИЙ');
+      const guessResult = await GuessService.addGuess(currentGame.id, currentPlayer.id, guess, resultText, matchCount);
+      console.log('Guess added to DB:', guessResult);
 
-    if (isWin) {
-      console.log('Game won! Finishing game...');
-      await GameService.finishGame(currentGame.id, currentPlayer.id);
-    } else {
-      // Switch turn
-      const nextPlayer = isCreator ? game.opponent_id : game.creator_id;
-      if (nextPlayer) {
-        console.log('Switching turn to:', nextPlayer);
-        await GameService.switchTurn(currentGame.id, nextPlayer);
+      if (isWin) {
+        console.log('Game won! Finishing game...');
+        await GameService.finishGame(currentGame.id, currentPlayer.id);
+      } else {
+        // Switch turn
+        const nextPlayer = isCreator ? game.opponent_id : game.creator_id;
+        if (nextPlayer) {
+          console.log('Switching turn to:', nextPlayer);
+          await GameService.switchTurn(currentGame.id, nextPlayer);
+        }
       }
-    }
 
-    setCurrentInput('');
+      setCurrentInput('');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleInput = (char: string) => {
@@ -567,7 +584,7 @@ const App: React.FC = () => {
       </button>
 
       {/* Waiting Games */}
-      <div className="flex-1 overflow-y-auto bg-gray-900/50 border border-gray-800 rounded p-3 mb-4">
+      <div className="overflow-y-auto bg-gray-900/50 border border-gray-800 rounded p-3 mb-4" style={{ minHeight: '400px', maxHeight: '60vh' }}>
         <h2 className="text-xs font-mono text-gray-500 mb-3 border-b border-gray-700 pb-2">
           АКТИВНЫЕ ИГРЫ ({waitingGames.length})
         </h2>
@@ -715,7 +732,7 @@ const App: React.FC = () => {
             return (
               <div
                 key={idx}
-                className={`w-8 h-8 sm:w-10 sm:h-10 border-2 flex items-center justify-center text-sm sm:text-base font-bold rounded transition-all ${
+                className={`w-6 h-6 sm:w-8 sm:h-8 border-2 flex items-center justify-center text-xs sm:text-sm font-bold rounded transition-all ${
                   isMatch
                     ? 'bg-squid-green/30 border-squid-green text-squid-green'
                     : 'bg-gray-800 border-gray-600 text-gray-400'
@@ -733,60 +750,80 @@ const App: React.FC = () => {
     const opponentSecretValue = isCreator ? currentGame?.opponent_secret : currentGame?.creator_secret;
 
     return (
-      <div className="min-h-screen flex flex-col mx-auto p-4 relative max-w-2xl">
-        {/* Header */}
-        <div className="flex justify-between items-center py-3 border-b border-gray-800 mb-3">
-          <div className="flex gap-2 items-center">
-            <span className="text-squid-pink text-xl">{getOpponentAvatar()}</span>
-            <span className="text-sm text-gray-400">{getOpponentNickname()}</span>
+      <div className="min-h-screen flex flex-col mx-auto relative max-w-2xl">
+        {/* Sticky Header */}
+        <div className="sticky top-0 z-20 bg-squid-dark px-4 pt-3 pb-2 border-b border-gray-800">
+          <div className="flex justify-between items-center">
+            <div className="flex gap-2 items-center">
+              <span className="text-squid-pink text-xl">{getOpponentAvatar()}</span>
+              <span className="text-sm text-gray-400">{getOpponentNickname()}</span>
+            </div>
+            <div className="flex items-center gap-3">
+              {/* Мое загаданное слово/цифры - мелким шрифтом */}
+              {status !== GameStatus.SETUP && mySecret && (
+                <div className="text-[10px] text-gray-500 font-mono">
+                  МОЕ: <span className="text-squid-green">{mySecret}</span>
+                </div>
+              )}
+              <div className="font-mono text-xs text-gray-400">
+                {currentGame?.prize && <span className="text-yellow-400 mr-2">💰 {currentGame.prize}</span>}
+                РАУНД {currentGame?.turn_count || 0}
+              </div>
+              <button onClick={handleBackToLobby} className="text-xs text-red-500 font-bold hover:underline uppercase">
+                Выход
+              </button>
+            </div>
           </div>
-          <div className="font-mono text-xs text-gray-400">
-            {currentGame?.prize && <span className="text-yellow-400 mr-2">💰 {currentGame.prize}</span>}
-            РАУНД {currentGame?.turn_count || 0}
+        </div>
+
+        {/* Info Banner + Opponent Secret - Sticky */}
+        <div className="sticky top-[57px] z-10 bg-squid-dark px-4 pb-2">
+          <div className="bg-squid-panel border-l-4 border-squid-pink p-2 mb-2 font-mono text-sm text-center shadow-lg text-white">
+            {feedback}
           </div>
-          <button onClick={handleBackToLobby} className="text-xs text-red-500 font-bold hover:underline uppercase">
-            Выход
-          </button>
+
+          {/* Opponent's Secret - только блок оппонента */}
+          {status !== GameStatus.SETUP && (
+            <div className="mb-2">
+              {renderSecretDisplay(false)}
+            </div>
+          )}
+
+          {/* My Secret Display - только для SETUP режима */}
+          {status === GameStatus.SETUP && (
+            <div className="mb-2">
+              {renderSecretDisplay(true)}
+            </div>
+          )}
         </div>
 
-        {/* Info Banner */}
-        <div className="bg-squid-panel border-l-4 border-squid-pink p-2 mb-3 font-mono text-sm text-center shadow-lg text-white">
-          {feedback}
-        </div>
-
-        {/* Secrets Display */}
-        <div className="mb-3">
-          {status !== GameStatus.SETUP && renderSecretDisplay(false)}
-          {renderSecretDisplay(true)}
-        </div>
-
-        {/* History - scrollable area above keyboard */}
-        <div className="flex-1 overflow-y-auto mb-3 border border-gray-800 rounded bg-gray-900/30 p-3" ref={scrollRef} style={{ maxHeight: 'calc(100vh - 550px)', minHeight: '200px' }}>
-          <h3 className="text-xs font-bold text-gray-500 mb-3 uppercase sticky top-0 bg-gray-900 pb-2">
+        {/* History - scrollable area */}
+        <div className="flex-1 overflow-y-auto px-4 pb-2" ref={scrollRef}>
+          <h3 className="text-xs font-bold text-gray-500 mb-2 uppercase">
             📊 История отгадываний
           </h3>
           {guesses.length === 0 ? (
-            <div className="text-center text-gray-600 text-xs py-8">
+            <div className="text-center text-gray-600 text-xs py-6">
               История пуста<br/>Начните угадывать!
             </div>
           ) : (
-            <div className="space-y-3">
+            <div className="space-y-2">
               {guesses.map((guess, idx) => {
                 const isMine = guess.player_id === currentPlayer?.id;
                 const targetSecret = isMine ? (opponentSecretValue || '') : (mySecret || '');
 
                 return (
                   <div key={guess.id || idx} className="bg-gray-800/50 rounded p-2 border border-gray-700">
-                    <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center justify-between mb-1">
                       <span className={`text-xs font-bold ${isMine ? 'text-squid-green' : 'text-squid-pink'}`}>
                         {isMine ? `ВЫ (${currentPlayer?.login})` : getOpponentNickname()}
                       </span>
-                      <span className="text-xs text-gray-500">
+                      <span className="text-[10px] text-gray-500">
                         #{idx + 1}
                       </span>
                     </div>
                     {renderGuessSquares(guess, targetSecret)}
-                    <div className="text-xs text-center mt-2 font-mono text-gray-400">
+                    <div className="text-[10px] text-center mt-1 font-mono text-gray-400">
                       {guess.result}
                     </div>
                   </div>
@@ -797,7 +834,7 @@ const App: React.FC = () => {
         </div>
 
         {/* Controls Area - Fixed at bottom */}
-        <div className="bg-squid-dark pt-2 pb-4">
+        <div className="sticky bottom-0 z-10 bg-squid-dark px-4 pt-3 pb-4 border-t border-gray-800">
           {status === GameStatus.PLAYING && (
             <Timer
               duration={TURN_DURATION}
@@ -825,7 +862,7 @@ const App: React.FC = () => {
               onInput={handleInput}
               onDelete={handleDelete}
               onSubmit={status === GameStatus.SETUP ? handleSetupSubmit : handleSubmitGuess}
-              disabled={status === GameStatus.PLAYING && currentGame?.current_turn !== currentPlayer?.id}
+              disabled={(status === GameStatus.PLAYING && currentGame?.current_turn !== currentPlayer?.id) || isSubmitting}
               usedKeys={[]}
             />
           </div>
