@@ -12,6 +12,7 @@ export const supabase = createClient(supabaseUrl || '', supabaseAnonKey || '');
 // Типы для БД
 export interface Player {
   id: string;
+  login: string | null;
   nickname: string;
   avatar: '○' | '△' | '□';
   is_online: boolean;
@@ -49,11 +50,11 @@ export interface Guess {
 
 // Сервис для работы с игроками
 export class PlayerService {
-  // Создать нового игрока
-  static async createPlayer(nickname: string, avatar: '○' | '△' | '□'): Promise<Player | null> {
+  // Создать нового игрока с логином
+  static async createPlayer(login: string, avatar: '○' | '△' | '□'): Promise<Player | null> {
     const { data, error } = await supabase
       .from('players')
-      .insert([{ nickname, avatar, is_online: true }])
+      .insert([{ login, nickname: login, avatar, is_online: true }])
       .select()
       .single();
 
@@ -63,6 +64,22 @@ export class PlayerService {
     }
 
     return data;
+  }
+
+  // Проверить доступность логина
+  static async isLoginAvailable(login: string): Promise<boolean> {
+    const { data, error } = await supabase
+      .from('players')
+      .select('id')
+      .ilike('login', login)
+      .limit(1);
+
+    if (error) {
+      console.error('Error checking login:', error);
+      return false;
+    }
+
+    return data.length === 0;
   }
 
   // Обновить статус онлайн
