@@ -7,6 +7,7 @@ interface KeyboardProps {
   onSubmit: () => void;
   disabled: boolean;
   usedKeys?: string[];
+  loading?: boolean;
 }
 
 export const Keyboard: React.FC<KeyboardProps> = ({ 
@@ -15,7 +16,8 @@ export const Keyboard: React.FC<KeyboardProps> = ({
   onDelete, 
   onSubmit, 
   disabled,
-  usedKeys = [] 
+  usedKeys = [],
+  loading = false 
 }) => {
   
   const getButtonClass = (key: string) => {
@@ -46,17 +48,25 @@ export const Keyboard: React.FC<KeyboardProps> = ({
         ))}
         <button
           onClick={onDelete}
-          disabled={disabled}
+          disabled={disabled || loading}
           className="h-12 sm:h-14 col-start-1 row-start-4 bg-red-900/50 text-red-200 border-red-800 border-b-4 rounded font-bold text-sm"
         >
           СТЕРЕТЬ
         </button>
         <button
           onClick={onSubmit}
-          disabled={disabled}
-          className="h-12 sm:h-14 col-start-3 row-start-4 bg-squid-pink text-white border-red-900 border-b-4 rounded font-bold text-sm"
+          disabled={disabled || loading}
+          aria-busy={loading}
+          className={`h-12 sm:h-14 col-start-3 row-start-4 bg-squid-pink text-white border-red-900 border-b-4 rounded font-bold text-sm flex items-center justify-center ${loading ? 'opacity-80' : ''}`}
         >
-          ВВОД
+          {loading ? (
+            <span className="flex items-center">
+              <span className="inline-block w-4 h-4 border-2 border-white/60 border-t-transparent rounded-full animate-spin mr-2"></span>
+              ОТПРАВКА...
+            </span>
+          ) : (
+            'ВВОД'
+          )}
         </button>
       </div>
     );
@@ -95,10 +105,18 @@ export const Keyboard: React.FC<KeyboardProps> = ({
         </button>
         <button
           onClick={onSubmit}
-          disabled={disabled}
-          className="flex-1 py-3 bg-squid-pink border-red-900 border-b-4 rounded text-white font-bold text-xs sm:text-sm"
+          disabled={disabled || loading}
+          aria-busy={loading}
+          className={`flex-1 py-3 bg-squid-pink border-red-900 border-b-4 rounded text-white font-bold text-xs sm:text-sm flex items-center justify-center ${loading ? 'opacity-80' : ''}`}
         >
-          ПОДТВЕРДИТЬ ХОД
+          {loading ? (
+            <span className="flex items-center">
+              <span className="inline-block w-4 h-4 border-2 border-white/60 border-t-transparent rounded-full animate-spin mr-2"></span>
+              ОТПРАВКА...
+            </span>
+          ) : (
+            'ПОДТВЕРДИТЬ ХОД'
+          )}
         </button>
       </div>
     </div>
