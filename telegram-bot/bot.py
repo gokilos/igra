@@ -5,6 +5,7 @@ Telegram бот для игры "Быки и Коровы"
 """
 
 import os
+from dotenv import load_dotenv
 import logging
 from datetime import datetime
 from typing import Optional
@@ -26,11 +27,21 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+load_dotenv(os.path.join(SCRIPT_DIR, '.env'))
+
 # Константы
-BOT_TOKEN = "8131071089:AAEf_oNUIDV-HGYzptZ5ZAiWSHyriA9co3s"
-WEBAPP_URL = os.getenv("WEBAPP_URL", "https://your-webapp-url.com")  # Замените на URL вашего приложения
-SUPABASE_URL = os.getenv("SUPABASE_URL", "")  # Добавьте URL Supabase
-SUPABASE_KEY = os.getenv("SUPABASE_KEY", "")  # Добавьте ключ Supabase
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+WEBAPP_URL = os.getenv("WEBAPP_URL")
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+
+if not BOT_TOKEN:
+    raise RuntimeError("BOT_TOKEN не задан в переменных окружения (.env)")
+if not WEBAPP_URL:
+    raise RuntimeError("WEBAPP_URL не задан в переменных окружения (.env)")
+if not SUPABASE_URL or not SUPABASE_KEY:
+    logger.warning("SUPABASE_URL/SUPABASE_KEY не заданы — функции БД будут недоступны")
 
 # Инициализация Supabase клиента
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY) if SUPABASE_URL and SUPABASE_KEY else None
