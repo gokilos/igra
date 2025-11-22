@@ -35,16 +35,10 @@ const Timer: React.FC<TimerProps> = ({ duration, onTimeUp, isActive, resetKey })
   const isCritical = timeLeft <= 10;
 
   return (
-    <div className="w-full mb-4">
-      <div className="flex justify-between text-xs font-mono mb-1 text-gray-400">
-        <span>TIME REMAINING</span>
-        <span className={isCritical ? 'text-squid-pink animate-pulse' : 'text-squid-green'}>
-          00:{timeLeft.toString().padStart(2, '0')}
-        </span>
-      </div>
-      <div className="h-2 w-full bg-squid-dark border border-gray-700 rounded-full overflow-hidden relative">
-        <div 
-          className={`h-full transition-all duration-1000 ease-linear ${isCritical ? 'bg-squid-pink' : 'bg-squid-green'}`}
+    <div className="w-full">
+      <div className="h-1.5 w-full bg-squid-dark/50 rounded-full overflow-hidden relative">
+        <div
+          className={`h-full transition-all duration-1000 ease-linear ${isCritical ? 'bg-squid-pink animate-pulse' : 'bg-squid-green'}`}
           style={{ width: `${progress}%` }}
         />
       </div>
