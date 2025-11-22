@@ -16,6 +16,24 @@ export enum GameStatus {
   GAME_OVER = 'GAME_OVER',
 }
 
+export enum AppScreen {
+  START = 'START',
+  CHARACTER_SELECT = 'CHARACTER_SELECT',
+  LOGIN = 'LOGIN',
+  GAME = 'GAME',
+}
+
+export interface Character {
+  id: string;
+  name: string;
+  description: string;
+  speed: number; // 0-100
+  damage: number; // 0-100
+  health: number; // 0-100
+  imagePath?: string; // путь к изображению персонажа
+  avatarPath?: string; // путь к аватарке персонажа
+}
+
 export interface TurnHistoryItem {
   player: PlayerType;
   guess: string;

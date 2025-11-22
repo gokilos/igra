@@ -1,8 +1,11 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { GameMode, GameStatus } from './types';
+import { GameMode, GameStatus, AppScreen, Character } from './types';
 import { generateAISecretNumber, generateAISecretWord } from './services/ai';
 import Timer from './components/Timer';
 import { Keyboard } from './components/Keyboard';
+import { StartScreen } from './components/StartScreen';
+import { CharacterSelection } from './components/CharacterSelection';
+import { CHARACTERS } from './data/characters';
 import {
   PlayerService,
   GameService,
@@ -40,6 +43,10 @@ const Modal = ({ children, onClose }: { children?: React.ReactNode, onClose?: ()
 // --- Main App Component ---
 
 const App: React.FC = () => {
+  // Screen State
+  const [currentScreen, setCurrentScreen] = useState<AppScreen>(AppScreen.START);
+  const [selectedCharacter, setSelectedCharacter] = useState<Character | null>(null);
+
   // Player State
   const [currentPlayer, setCurrentPlayer] = useState<Player | null>(null);
   const [onlinePlayers, setOnlinePlayers] = useState<Player[]>([]);
@@ -99,17 +106,17 @@ const App: React.FC = () => {
           // Update online status
           await PlayerService.updateOnlineStatus(data.id, true);
           setCurrentPlayer(data);
-          setShowLoginModal(false);
+          setCurrentScreen(AppScreen.GAME);
 
           // Start heartbeat
           stopHeartbeatRef.current = startHeartbeat(data.id);
         } else {
           // Player not found, clear localStorage
           localStorage.removeItem('squid_player_id');
-          setShowLoginModal(true);
+          setCurrentScreen(AppScreen.START);
         }
       } else {
-        setShowLoginModal(true);
+        setCurrentScreen(AppScreen.START);
       }
 
       setIsLoadingSession(false);
@@ -300,11 +307,12 @@ const App: React.FC = () => {
       return;
     }
 
-    // Создать игрока
-    const player = await PlayerService.createPlayer(trimmedLogin, selectedAvatar);
+    // Создать игрока с ID персонажа в качестве аватара
+    const avatarId = selectedCharacter?.id || 'player_067';
+    const player = await PlayerService.createPlayer(trimmedLogin, avatarId as any);
     if (player) {
       setCurrentPlayer(player);
-      setShowLoginModal(false);
+      setCurrentScreen(AppScreen.GAME);
 
       // Start heartbeat to keep player online
       stopHeartbeatRef.current = startHeartbeat(player.id);
@@ -489,12 +497,47 @@ const App: React.FC = () => {
     }
     localStorage.removeItem('squid_player_id');
     setCurrentPlayer(null);
-    setShowLoginModal(true);
+    setCurrentScreen(AppScreen.START);
     setStatus(GameStatus.LOBBY);
     setCurrentGame(null);
+    setSelectedCharacter(null);
+  };
+
+  const handleStartGame = () => {
+    setCurrentScreen(AppScreen.CHARACTER_SELECT);
+  };
+
+  const handleCharacterSelect = (character: Character) => {
+    setSelectedCharacter(character);
+    setCurrentScreen(AppScreen.LOGIN);
   };
 
   // --- Render Helpers ---
+
+  const getCharacterById = (characterId: string): Character | null => {
+    return CHARACTERS.find(c => c.id === characterId) || null;
+  };
+
+  const getPlayerAvatar = (player: Player): JSX.Element => {
+    const character = getCharacterById(player.avatar);
+    if (character?.avatarPath) {
+      return (
+        <img
+          src={character.avatarPath}
+          alt={player.login || player.nickname}
+          className="w-8 h-8 rounded-full object-cover border-2 border-squid-pink"
+          onError={(e) => {
+            const target = e.target as HTMLImageElement;
+            target.style.display = 'none';
+            if (target.nextElementSibling) {
+              (target.nextElementSibling as HTMLElement).style.display = 'flex';
+            }
+          }}
+        />
+      );
+    }
+    return <span className="text-xl">{player.avatar}</span>;
+  };
 
   const getOpponentNickname = (): string => {
     if (!currentGame) return '???';
@@ -503,11 +546,12 @@ const App: React.FC = () => {
     return opponent?.login || opponent?.nickname || '???';
   };
 
-  const getOpponentAvatar = (): string => {
-    if (!currentGame) return '?';
+  const getOpponentAvatar = (): JSX.Element => {
+    if (!currentGame) return <span>?</span>;
     const opponentId = isCreator ? currentGame.opponent_id : currentGame.creator_id;
     const opponent = onlinePlayers.find(p => p.id === opponentId);
-    return opponent?.avatar || '?';
+    if (!opponent) return <span>?</span>;
+    return getPlayerAvatar(opponent);
   };
 
   const renderSecretDisplay = (isMine: boolean) => {
@@ -567,9 +611,12 @@ const App: React.FC = () => {
         <h1 className="text-3xl font-black tracking-widest text-white">
           ИГРА В<br/><span className="text-squid-pink">КАЛЬМАРА</span>
         </h1>
-        <p className="text-squid-green font-mono text-xs tracking-widest">
-          ВАШ ID: {currentPlayer?.login || currentPlayer?.nickname} {currentPlayer?.avatar}
-        </p>
+        <div className="flex items-center justify-center gap-2">
+          <p className="text-squid-green font-mono text-xs tracking-widest">
+            ВАШ ID: {currentPlayer?.login || currentPlayer?.nickname}
+          </p>
+          {currentPlayer && getPlayerAvatar(currentPlayer)}
+        </div>
         <div className="text-yellow-400 font-mono text-sm">
           ОНЛАЙН: {onlineCount} игроков
         </div>
@@ -603,7 +650,9 @@ const App: React.FC = () => {
                 <div key={game.id} className={`bg-squid-panel border p-3 rounded ${isMyGame ? 'border-squid-green' : 'border-gray-700'}`}>
                   <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center gap-3">
-                      <div className="text-squid-pink font-bold text-xl">{creator?.avatar || '?'}</div>
+                      <div className="flex items-center justify-center w-10 h-10">
+                        {creator ? getPlayerAvatar(creator) : <span>?</span>}
+                      </div>
                       <div>
                         <div className="text-white text-sm font-bold">
                           {creator?.login || creator?.nickname || 'Игрок'}
@@ -654,7 +703,7 @@ const App: React.FC = () => {
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
           {onlinePlayers.slice(0, 12).map((player) => (
             <div key={player.id} className="text-xs bg-gray-800/50 rounded px-2 py-1 flex items-center gap-2">
-              <span className="text-base">{player.avatar}</span>
+              {getPlayerAvatar(player)}
               <span className="text-gray-400 truncate">{player.login || player.nickname}</span>
             </div>
           ))}
@@ -755,7 +804,7 @@ const App: React.FC = () => {
         <div className="sticky top-0 z-30 bg-squid-dark px-4 pt-3 pb-2 border-b border-gray-800">
           <div className="flex justify-between items-center">
             <div className="flex gap-2 items-center">
-              <span className="text-squid-pink text-xl">{getOpponentAvatar()}</span>
+              {getOpponentAvatar()}
               <span className="text-sm text-gray-400">{getOpponentNickname()}</span>
             </div>
             <div className="flex items-center gap-3">
@@ -908,7 +957,7 @@ const App: React.FC = () => {
     );
   };
 
-  // Login Modal
+  // Loading Screen
   if (isLoadingSession) {
     return (
       <div className="min-h-screen bg-squid-dark flex items-center justify-center">
@@ -917,16 +966,48 @@ const App: React.FC = () => {
     );
   }
 
-  if (!currentPlayer && showLoginModal) {
+  // Start Screen
+  if (currentScreen === AppScreen.START) {
+    return <StartScreen onStart={handleStartGame} />;
+  }
+
+  // Character Selection Screen
+  if (currentScreen === AppScreen.CHARACTER_SELECT) {
+    return <CharacterSelection characters={CHARACTERS} onSelect={handleCharacterSelect} />;
+  }
+
+  // Login Screen
+  if (currentScreen === AppScreen.LOGIN) {
     return (
       <div className="min-h-screen bg-squid-dark flex items-center justify-center p-4">
-        <Modal>
+        <Modal onClose={() => setCurrentScreen(AppScreen.CHARACTER_SELECT)}>
           <h1 className="text-3xl font-black text-center mb-2">
             ИГРА В<br/><span className="text-squid-pink">КАЛЬМАРА</span>
           </h1>
           <p className="text-gray-400 text-sm text-center mb-6">
-            Выберите логин и аватар для входа
+            Введите ваш логин для {selectedCharacter?.name}
           </p>
+
+          {/* Character Preview */}
+          {selectedCharacter && (
+            <div className="flex items-center gap-4 mb-6 p-4 bg-gray-800/50 rounded border border-squid-pink/30">
+              <div className="w-16 h-16 rounded-full bg-gradient-to-b from-teal-500/30 to-green-500/30 flex items-center justify-center">
+                <img
+                  src={selectedCharacter.avatarPath || selectedCharacter.imagePath}
+                  alt={selectedCharacter.name}
+                  className="w-12 h-12 rounded-full object-cover"
+                  onError={(e) => {
+                    const target = e.target as HTMLImageElement;
+                    target.style.display = 'none';
+                  }}
+                />
+              </div>
+              <div>
+                <p className="text-squid-green font-bold">{selectedCharacter.name}</p>
+                <p className="text-xs text-gray-400">Выбранный персонаж</p>
+              </div>
+            </div>
+          )}
 
           <div className="space-y-4">
             {/* Login Input */}
@@ -959,28 +1040,6 @@ const App: React.FC = () => {
               </p>
             </div>
 
-            {/* Avatar Selection */}
-            <div>
-              <label className="text-xs text-gray-400 uppercase block mb-2">
-                Выберите аватар:
-              </label>
-              <div className="flex gap-3 justify-center">
-                {(['○', '△', '□'] as const).map((avatar) => (
-                  <button
-                    key={avatar}
-                    onClick={() => setSelectedAvatar(avatar)}
-                    className={`w-16 h-16 border-2 rounded flex items-center justify-center text-3xl transition-all ${
-                      selectedAvatar === avatar
-                        ? 'border-squid-pink bg-squid-pink/20 text-squid-pink'
-                        : 'border-gray-700 text-gray-500 hover:border-gray-500'
-                    }`}
-                  >
-                    {avatar}
-                  </button>
-                ))}
-              </div>
-            </div>
-
             {/* Submit Button */}
             <button
               onClick={handleLoginSubmit}
@@ -995,6 +1054,7 @@ const App: React.FC = () => {
     );
   }
 
+  // Game Screen (Lobby or Playing)
   return (
     <div className="bg-squid-dark min-h-screen text-white overflow-hidden font-sans">
       {currentPlayer && (status === GameStatus.LOBBY ? renderLobby() : renderGame())}
