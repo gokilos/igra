@@ -46,8 +46,26 @@ SUPABASE_KEY=your-anon-key
 
 ## Запуск
 
+Для полноценной работы нужно запустить 2 процесса:
+
+### 1. Основной бот (обработка команд)
 ```bash
 python bot.py
+```
+
+### 2. Слушатель приглашений (отправка уведомлений)
+```bash
+python invitations_listener.py
+```
+
+Или запустите оба процесса одновременно:
+```bash
+# Linux/Mac
+python bot.py & python invitations_listener.py
+
+# Или используйте screen/tmux
+screen -dmS bot python bot.py
+screen -dmS listener python invitations_listener.py
 ```
 
 ## Команды бота

@@ -74,6 +74,7 @@ const App: React.FC = () => {
   const [newGamePrize, setNewGamePrize] = useState('');
   const [newGameName, setNewGameName] = useState('');
   const [newGameMode, setNewGameMode] = useState<GameMode>(GameMode.NUMBERS);
+  const [newWordLength, setNewWordLength] = useState<number>(5);
 
   // Invitation State
   const [showInviteModal, setShowInviteModal] = useState(false);
@@ -275,7 +276,7 @@ const App: React.FC = () => {
 
         // Виброотклик при получении хода от оппонента
         if (guess.player_id !== currentPlayer?.id) {
-          haptic.light();
+          haptic.medium(); // Средняя вибрация для уведомления о ходе оппонента
         }
 
         setGuesses(prev => {
@@ -293,12 +294,16 @@ const App: React.FC = () => {
     }
   }, [currentGame?.id]);
 
-  // Scroll history to bottom
+  // Scroll history to bottom when guesses update or when it's my turn
   useEffect(() => {
     if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+      // Прокручиваем плавно вниз
+      scrollRef.current.scrollTo({
+        top: scrollRef.current.scrollHeight,
+        behavior: 'smooth'
+      });
     }
-  }, [guesses]);
+  }, [guesses, currentGame?.current_turn]);
 
   // --- Handlers ---
 
@@ -348,7 +353,8 @@ const App: React.FC = () => {
       currentPlayer.id,
       newGameMode,
       newGamePrize || undefined,
-      newGameName || undefined
+      newGameName || undefined,
+      newGameMode === GameMode.WORDS ? newWordLength : undefined
     );
 
     if (game) {
@@ -356,12 +362,13 @@ const App: React.FC = () => {
       setGameMode(newGameMode);
       setIsCreator(true);
       setStatus(GameStatus.SETUP);
-      setFeedback(newGameMode === GameMode.NUMBERS ? 'ЗАГАДАЙ 4 ЦИФРЫ' : 'ЗАГАДАЙ СЛОВО (5 БУКВ)');
+      const wordLen = game.word_length || newWordLength;
+      setFeedback(newGameMode === GameMode.NUMBERS ? 'ЗАГАДАЙ 4 ЦИФРЫ' : `ЗАГАДАЙ СЛОВО (${wordLen} БУКВ)`);
       setShowCreateGameModal(false);
       setNewGamePrize('');
       setNewGameName('');
 
-      const len = newGameMode === GameMode.NUMBERS ? NUM_LENGTH : WORD_LENGTH;
+      const len = newGameMode === GameMode.NUMBERS ? NUM_LENGTH : wordLen;
       setMyRevealedIndices(Array(len).fill(false));
       setOpponentRevealedIndices(Array(len).fill(false));
     }
@@ -700,11 +707,11 @@ const App: React.FC = () => {
                       </div>
                       <div>
                         <div className="text-white text-sm font-bold">
-                          {creator?.login || creator?.nickname || 'Игрок'}
-                          {isMyGame && <span className="text-squid-green text-xs ml-2">(ваша игра)</span>}
+                          {game.game_name || `Игра от ${creator?.login || creator?.nickname || 'Игрока'}`}
+                          {isMyGame && <span className="text-squid-green text-xs ml-2">(ваша)</span>}
                         </div>
                         <div className="text-[10px] text-gray-400">
-                          {game.game_mode === 'NUMBERS' ? '🔢 ЦИФРЫ' : '📝 СЛОВА'}
+                          {game.game_mode === 'NUMBERS' ? '🔢 ЦИФРЫ' : '📝 СЛОВА'} • от {creator?.login || creator?.nickname}
                         </div>
                       </div>
                     </div>
@@ -811,6 +818,24 @@ const App: React.FC = () => {
                 </button>
               </div>
             </div>
+
+            {/* Длина слова - только для режима СЛОВА */}
+            {newGameMode === GameMode.WORDS && (
+              <div>
+                <label className="text-xs text-gray-400 uppercase block mb-2">Длина слова:</label>
+                <div className="flex gap-2">
+                  {[5, 6, 10].map(length => (
+                    <button
+                      key={length}
+                      onClick={() => setNewWordLength(length)}
+                      className={`flex-1 py-2 px-4 rounded font-bold ${newWordLength === length ? 'bg-squid-green text-black' : 'bg-gray-800 text-gray-400'}`}
+                    >
+                      {length} букв
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
 
             <div>
               <label className="text-xs text-gray-400 uppercase block mb-2">Приз (опционально):</label>
