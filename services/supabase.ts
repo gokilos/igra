@@ -27,6 +27,7 @@ export interface Game {
   game_mode: 'NUMBERS' | 'WORDS';
   status: 'WAITING' | 'SETUP' | 'PLAYING' | 'FINISHED';
   prize: string | null;
+  game_name: string | null;
   creator_secret: string | null;
   opponent_secret: string | null;
   creator_revealed_indices: boolean[];
@@ -46,6 +47,16 @@ export interface Guess {
   result: string;
   matches_count: number;
   created_at: string;
+}
+
+export interface Invitation {
+  id: string;
+  game_id: string;
+  from_player_id: string;
+  to_player_id: string;
+  status: 'PENDING' | 'ACCEPTED' | 'REJECTED' | 'EXPIRED';
+  created_at: string;
+  updated_at: string;
 }
 
 // Сервис для работы с игроками
@@ -143,7 +154,8 @@ export class GameService {
   static async createGame(
     creatorId: string,
     gameMode: 'NUMBERS' | 'WORDS',
-    prize?: string
+    prize?: string,
+    gameName?: string
   ): Promise<Game | null> {
     const { data, error } = await supabase
       .from('games')
@@ -152,6 +164,7 @@ export class GameService {
         game_mode: gameMode,
         status: 'WAITING',
         prize: prize || null,
+        game_name: gameName || null,
         creator_revealed_indices: [],
         opponent_revealed_indices: []
       }])
@@ -395,6 +408,71 @@ export class GuessService {
         callback(payload.new as Guess);
       })
       .subscribe();
+  }
+}
+
+// Сервис для работы с приглашениями
+export class InvitationService {
+  // Отправить приглашение
+  static async sendInvitation(
+    gameId: string,
+    fromPlayerId: string,
+    toPlayerId: string
+  ): Promise<Invitation | null> {
+    const { data, error } = await supabase
+      .from('invitations')
+      .insert([{
+        game_id: gameId,
+        from_player_id: fromPlayerId,
+        to_player_id: toPlayerId,
+        status: 'PENDING'
+      }])
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Error sending invitation:', error);
+      return null;
+    }
+
+    return data;
+  }
+
+  // Получить приглашения игрока
+  static async getPlayerInvitations(playerId: string): Promise<Invitation[]> {
+    const { data, error } = await supabase
+      .from('invitations')
+      .select('*')
+      .eq('to_player_id', playerId)
+      .eq('status', 'PENDING')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Error fetching invitations:', error);
+      return [];
+    }
+
+    return data || [];
+  }
+
+  // Принять приглашение
+  static async acceptInvitation(invitationId: string): Promise<boolean> {
+    const { error } = await supabase
+      .from('invitations')
+      .update({ status: 'ACCEPTED' })
+      .eq('id', invitationId);
+
+    return !error;
+  }
+
+  // Отклонить приглашение
+  static async rejectInvitation(invitationId: string): Promise<boolean> {
+    const { error } = await supabase
+      .from('invitations')
+      .update({ status: 'REJECTED' })
+      .eq('id', invitationId);
+
+    return !error;
   }
 }
 

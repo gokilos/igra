@@ -1,4 +1,5 @@
 import React from 'react';
+import { haptic } from '../utils/haptic';
 
 interface KeyboardProps {
   mode: 'NUMERIC' | 'ALPHA';
@@ -39,7 +40,10 @@ export const Keyboard: React.FC<KeyboardProps> = ({
         {keys.map((k) => (
           <button
             key={k}
-            onClick={() => onInput(k)}
+            onClick={() => {
+              haptic.light();
+              onInput(k);
+            }}
             disabled={disabled}
             className={`h-12 sm:h-14 text-xl ${getButtonClass(k)} ${k === '0' ? 'col-start-2' : ''}`}
           >
@@ -47,14 +51,20 @@ export const Keyboard: React.FC<KeyboardProps> = ({
           </button>
         ))}
         <button
-          onClick={onDelete}
+          onClick={() => {
+            haptic.light();
+            onDelete();
+          }}
           disabled={disabled || loading}
           className="h-12 sm:h-14 col-start-1 row-start-4 bg-red-900/50 text-red-200 border-red-800 border-b-4 rounded font-bold text-sm"
         >
           СТЕРЕТЬ
         </button>
         <button
-          onClick={onSubmit}
+          onClick={() => {
+            haptic.medium();
+            onSubmit();
+          }}
           disabled={disabled || loading}
           aria-busy={loading}
           className={`h-12 sm:h-14 col-start-3 row-start-4 bg-squid-pink text-white border-red-900 border-b-4 rounded font-bold text-sm flex items-center justify-center ${loading ? 'opacity-80' : ''}`}
@@ -86,7 +96,10 @@ export const Keyboard: React.FC<KeyboardProps> = ({
           {row.map((char) => (
             <button
               key={char}
-              onClick={() => onInput(char)}
+              onClick={() => {
+                haptic.light();
+                onInput(char);
+              }}
               disabled={disabled}
               className={`h-10 w-[8.5%] sm:h-12 sm:w-10 text-xs sm:text-sm ${getButtonClass(char)}`}
             >
@@ -97,14 +110,20 @@ export const Keyboard: React.FC<KeyboardProps> = ({
       ))}
       <div className="flex justify-center gap-2 mt-2 px-1">
          <button
-          onClick={onDelete}
+          onClick={() => {
+            haptic.light();
+            onDelete();
+          }}
           disabled={disabled}
           className="px-4 py-3 bg-gray-800 border-gray-600 border-b-4 rounded text-white font-bold text-xs sm:text-sm w-24"
         >
           УДАЛИТЬ
         </button>
         <button
-          onClick={onSubmit}
+          onClick={() => {
+            haptic.medium();
+            onSubmit();
+          }}
           disabled={disabled || loading}
           aria-busy={loading}
           className={`flex-1 py-3 bg-squid-pink border-red-900 border-b-4 rounded text-white font-bold text-xs sm:text-sm flex items-center justify-center ${loading ? 'opacity-80' : ''}`}

@@ -6,13 +6,16 @@ import { Keyboard } from './components/Keyboard';
 import { StartScreen } from './components/StartScreen';
 import { CharacterSelection } from './components/CharacterSelection';
 import { CHARACTERS } from './data/characters';
+import { haptic } from './utils/haptic';
 import {
   PlayerService,
   GameService,
   GuessService,
+  InvitationService,
   Player,
   Game,
   Guess,
+  Invitation,
   startHeartbeat,
   supabase
 } from './services/supabase';
@@ -69,7 +72,12 @@ const App: React.FC = () => {
   const [waitingGames, setWaitingGames] = useState<Game[]>([]);
   const [showCreateGameModal, setShowCreateGameModal] = useState(false);
   const [newGamePrize, setNewGamePrize] = useState('');
+  const [newGameName, setNewGameName] = useState('');
   const [newGameMode, setNewGameMode] = useState<GameMode>(GameMode.NUMBERS);
+
+  // Invitation State
+  const [showInviteModal, setShowInviteModal] = useState(false);
+  const [inviteSearchQuery, setInviteSearchQuery] = useState('');
 
   // Gameplay State
   const [currentInput, setCurrentInput] = useState('');
@@ -217,6 +225,13 @@ const App: React.FC = () => {
 
           // Update feedback and timer on turn change
           const isMyTurn = game.current_turn === currentPlayer?.id;
+          const wasMyTurn = currentGame?.current_turn === currentPlayer?.id;
+
+          // Виброотклик при смене хода на меня
+          if (isMyTurn && !wasMyTurn) {
+            haptic.medium();
+          }
+
           setFeedback(isMyTurn ? 'ТВОЙ ХОД' : 'ХОД ОППОНЕНТА');
           setTimerResetKey(k => k + 1);
         }
@@ -257,6 +272,12 @@ const App: React.FC = () => {
 
       const channel = GuessService.subscribeToGuesses(currentGame.id, (guess) => {
         console.log('New guess received:', guess);
+
+        // Виброотклик при получении хода от оппонента
+        if (guess.player_id !== currentPlayer?.id) {
+          haptic.light();
+        }
+
         setGuesses(prev => {
           // Избегаем дублирования
           if (prev.some(g => g.id === guess.id)) {
@@ -323,7 +344,13 @@ const App: React.FC = () => {
   const handleCreateGame = async () => {
     if (!currentPlayer) return;
 
-    const game = await GameService.createGame(currentPlayer.id, newGameMode, newGamePrize || undefined);
+    const game = await GameService.createGame(
+      currentPlayer.id,
+      newGameMode,
+      newGamePrize || undefined,
+      newGameName || undefined
+    );
+
     if (game) {
       setCurrentGame(game);
       setGameMode(newGameMode);
@@ -332,6 +359,7 @@ const App: React.FC = () => {
       setFeedback(newGameMode === GameMode.NUMBERS ? 'ЗАГАДАЙ 4 ЦИФРЫ' : 'ЗАГАДАЙ СЛОВО (5 БУКВ)');
       setShowCreateGameModal(false);
       setNewGamePrize('');
+      setNewGameName('');
 
       const len = newGameMode === GameMode.NUMBERS ? NUM_LENGTH : WORD_LENGTH;
       setMyRevealedIndices(Array(len).fill(false));
@@ -511,6 +539,24 @@ const App: React.FC = () => {
     setCurrentScreen(AppScreen.LOGIN);
   };
 
+  const handleSendInvitation = async (toPlayerId: string) => {
+    if (!currentPlayer || !currentGame) return;
+
+    const invitation = await InvitationService.sendInvitation(
+      currentGame.id,
+      currentPlayer.id,
+      toPlayerId
+    );
+
+    if (invitation) {
+      haptic.success();
+      alert('Приглашение отправлено!');
+    } else {
+      haptic.error();
+      alert('Ошибка отправки приглашения');
+    }
+  };
+
   // --- Render Helpers ---
 
   const getCharacterById = (characterId: string): Character | null => {
@@ -677,8 +723,19 @@ const App: React.FC = () => {
                       ВСТУПИТЬ В ИГРУ
                     </button>
                   ) : (
-                    <div className="text-center text-xs text-gray-500 py-2">
-                      Ожидание оппонента...
+                    <div className="space-y-2">
+                      <div className="text-center text-xs text-gray-500 py-1">
+                        Ожидание оппонента...
+                      </div>
+                      <button
+                        onClick={() => {
+                          setCurrentGame(game);
+                          setShowInviteModal(true);
+                        }}
+                        className="w-full bg-blue-600 hover:bg-blue-700 text-white text-xs px-3 py-2 rounded font-bold"
+                      >
+                        📨 ПРИГЛАСИТЬ УЧАСТНИКОВ
+                      </button>
                     </div>
                   )}
                 </div>
@@ -726,6 +783,18 @@ const App: React.FC = () => {
 
           <div className="space-y-4 text-left">
             <div>
+              <label className="text-xs text-gray-400 uppercase block mb-2">Название игры:</label>
+              <input
+                type="text"
+                value={newGameName}
+                onChange={(e) => setNewGameName(e.target.value)}
+                placeholder="Например: Игра за обед"
+                maxLength={50}
+                className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white text-sm focus:outline-none focus:border-squid-pink"
+              />
+            </div>
+
+            <div>
               <label className="text-xs text-gray-400 uppercase block mb-2">Режим игры:</label>
               <div className="flex gap-2">
                 <button
@@ -761,6 +830,61 @@ const App: React.FC = () => {
             >
               СОЗДАТЬ
             </button>
+          </div>
+        </Modal>
+      )}
+
+      {/* Invite Players Modal */}
+      {showInviteModal && currentGame && (
+        <Modal onClose={() => setShowInviteModal(false)}>
+          <h2 className="text-2xl font-black text-squid-pink mb-4">ПРИГЛАСИТЬ УЧАСТНИКОВ</h2>
+
+          {/* Search */}
+          <div className="mb-4">
+            <input
+              type="text"
+              value={inviteSearchQuery}
+              onChange={(e) => setInviteSearchQuery(e.target.value)}
+              placeholder="Поиск по логину..."
+              className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white text-sm focus:outline-none focus:border-squid-pink"
+            />
+          </div>
+
+          {/* Players List */}
+          <div className="max-h-96 overflow-y-auto space-y-2 mb-4">
+            {onlinePlayers
+              .filter(p =>
+                !inviteSearchQuery ||
+                p.login?.toLowerCase().includes(inviteSearchQuery.toLowerCase()) ||
+                p.nickname?.toLowerCase().includes(inviteSearchQuery.toLowerCase())
+              )
+              .map(player => (
+                <div
+                  key={player.id}
+                  className="bg-gray-800/50 rounded p-3 flex items-center justify-between border border-gray-700"
+                >
+                  <div className="flex items-center gap-3">
+                    {getPlayerAvatar(player)}
+                    <div>
+                      <div className="text-sm text-white font-bold">
+                        {player.login || player.nickname}
+                      </div>
+                      <div className="text-xs text-gray-400">
+                        🟢 Онлайн
+                      </div>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => {
+                      handleSendInvitation(player.id);
+                      haptic.medium();
+                    }}
+                    className="bg-squid-green hover:bg-green-700 text-black text-xs px-3 py-2 rounded font-bold"
+                  >
+                    ПРИГЛАСИТЬ
+                  </button>
+                </div>
+              ))}
           </div>
         </Modal>
       )}
@@ -801,16 +925,41 @@ const App: React.FC = () => {
       <div className="h-screen flex flex-col mx-auto relative max-w-2xl">
         {/* Sticky Header */}
         <div className="sticky top-0 z-30 bg-squid-dark px-4 pt-3 pb-2 border-b border-gray-800">
+          {/* Timer at the very top */}
+          {status === GameStatus.PLAYING && (
+            <div className="mb-2">
+              <Timer
+                duration={TURN_DURATION}
+                onTimeUp={handleTimeUp}
+                isActive={true}
+                resetKey={timerResetKey}
+              />
+            </div>
+          )}
           <div className="flex justify-between items-center">
             <div className="flex gap-2 items-center">
               {getOpponentAvatar()}
               <span className="text-sm text-gray-400">{getOpponentNickname()}</span>
             </div>
             <div className="flex items-center gap-3">
-              {/* Мое загаданное слово/цифры - мелким шрифтом */}
+              {/* Мое загаданное слово/цифры - с выделением угаданных */}
               {status !== GameStatus.SETUP && mySecret && (
-                <div className="text-[10px] text-gray-500 font-mono">
-                  МОЕ: <span className="text-squid-green">{mySecret}</span>
+                <div className="flex gap-0.5">
+                  {mySecret.split('').map((char, idx) => {
+                    const isRevealed = myRevealedIndices[idx];
+                    return (
+                      <div
+                        key={idx}
+                        className={`w-4 h-5 flex items-center justify-center text-[10px] font-mono font-bold rounded ${
+                          isRevealed
+                            ? 'bg-red-600 text-white border border-red-400'
+                            : 'bg-gray-800 text-squid-green border border-gray-700'
+                        }`}
+                      >
+                        {char}
+                      </div>
+                    );
+                  })}
                 </div>
               )}
               <div className="font-mono text-xs text-gray-400">
@@ -845,36 +994,55 @@ const App: React.FC = () => {
           )}
         </div>
 
-        {/* History - scrollable area */}
+        {/* History - scrollable area with improved styling */}
         <div className="flex-1 px-4 pb-2 overflow-hidden">
-          <div className="h-full overflow-y-auto" ref={scrollRef}>
-          <h3 className="text-xs font-bold text-gray-500 mb-2 uppercase">
-            📊 История отгадываний
-          </h3>
+          <div className="h-full overflow-y-auto pb-4" ref={scrollRef} style={{ scrollBehavior: 'smooth' }}>
+          <div className="flex items-center justify-between mb-3 sticky top-0 bg-squid-dark/95 backdrop-blur-sm py-2 z-10">
+            <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider">
+              📊 История ходов
+            </h3>
+            <span className="text-[10px] text-gray-600 font-mono">
+              Всего: {guesses.length}
+            </span>
+          </div>
           {guesses.length === 0 ? (
-            <div className="text-center text-gray-600 text-xs py-6">
+            <div className="text-center text-gray-600 text-xs py-8">
+              <div className="text-2xl mb-2">🎯</div>
               История пуста<br/>Начните угадывать!
             </div>
           ) : (
-            <div className="space-y-2">
+            <div className="space-y-2 pb-4">
               {guesses.map((guess, idx) => {
                 const isMine = guess.player_id === currentPlayer?.id;
                 const targetSecret = isMine ? (opponentSecretValue || '') : (mySecret || '');
 
                 return (
-                  <div key={guess.id || idx} className="bg-gray-800/50 rounded p-2 border border-gray-700">
-                    <div className="flex items-center justify-between mb-1">
-                      <span className={`text-xs font-bold ${isMine ? 'text-squid-green' : 'text-squid-pink'}`}>
-                        {isMine ? `ВЫ (${currentPlayer?.login})` : getOpponentNickname()}
-                      </span>
-                      <span className="text-[10px] text-gray-500">
-                        #{idx + 1}
+                  <div
+                    key={guess.id || idx}
+                    className={`rounded-lg p-2.5 border transition-all ${
+                      isMine
+                        ? 'bg-squid-green/5 border-squid-green/30'
+                        : 'bg-squid-pink/5 border-squid-pink/30'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${
+                          isMine
+                            ? 'bg-squid-green/20 text-squid-green'
+                            : 'bg-squid-pink/20 text-squid-pink'
+                        }`}>
+                          {isMine ? 'ВЫ' : 'ОПОНЕНТ'}
+                        </span>
+                        <span className="text-[9px] text-gray-500 font-mono">
+                          #{idx + 1}
+                        </span>
+                      </div>
+                      <span className="text-[9px] text-gray-600 font-mono">
+                        {guess.result}
                       </span>
                     </div>
                     {renderGuessSquares(guess, targetSecret)}
-                    <div className="text-[10px] text-center mt-1 font-mono text-gray-400">
-                      {guess.result}
-                    </div>
                   </div>
                 );
               })}
@@ -885,15 +1053,6 @@ const App: React.FC = () => {
 
         {/* Controls Area - Fixed at bottom */}
         <div className="sticky bottom-0 z-20 bg-squid-dark px-4 pt-3 pb-4 border-t border-gray-800">
-          {status === GameStatus.PLAYING && (
-            <Timer
-              duration={TURN_DURATION}
-              onTimeUp={handleTimeUp}
-              isActive={true}
-              resetKey={timerResetKey}
-            />
-          )}
-
           {/* Input Display */}
           {((status === GameStatus.PLAYING && currentGame?.current_turn === currentPlayer?.id) || status === GameStatus.SETUP) && (
             <div className="flex justify-center gap-2 mb-4">
