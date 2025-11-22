@@ -28,6 +28,7 @@ export interface Game {
   status: 'WAITING' | 'SETUP' | 'PLAYING' | 'FINISHED';
   prize: string | null;
   game_name: string | null;
+  word_length: number; // Длина слова для режима WORDS (5, 6, 10)
   creator_secret: string | null;
   opponent_secret: string | null;
   creator_revealed_indices: boolean[];
@@ -155,9 +156,10 @@ export class GameService {
     creatorId: string,
     gameMode: 'NUMBERS' | 'WORDS',
     prize?: string,
-    gameName?: string
+    gameName?: string,
+    wordLength?: number
   ): Promise<Game | null> {
-    const { data, error } = await supabase
+    const { data, error} = await supabase
       .from('games')
       .insert([{
         creator_id: creatorId,
@@ -165,6 +167,7 @@ export class GameService {
         status: 'WAITING',
         prize: prize || null,
         game_name: gameName || null,
+        word_length: wordLength || 5,
         creator_revealed_indices: [],
         opponent_revealed_indices: []
       }])
