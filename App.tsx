@@ -307,8 +307,9 @@ const App: React.FC = () => {
       return;
     }
 
-    // Создать игрока с валидным аватаром (○, △, □), чтобы пройти CHECK-constraint
-    const player = await PlayerService.createPlayer(trimmedLogin, selectedAvatar);
+    // Создать игрока с ID персонажа в качестве аватара
+    const avatarId = selectedCharacter?.id || 'player_067';
+    const player = await PlayerService.createPlayer(trimmedLogin, avatarId as any);
     if (player) {
       setCurrentPlayer(player);
       setCurrentScreen(AppScreen.GAME);
@@ -924,7 +925,7 @@ const App: React.FC = () => {
           <Modal>
             <div className="text-center space-y-6">
               <h2 className={`text-3xl font-black ${currentGame.winner_id === currentPlayer?.id ? 'text-squid-green' : 'text-squid-pink'}`}>
-                {currentGame.winner_id === currentPlayer?.id ? 'ВЫ ПОБЕДИЛИ' : 'ВЫ ПРО*БАЛИ'}
+                {currentGame.winner_id === currentPlayer?.id ? 'ПОБЕДА' : 'ВЫБЫЛ'}
               </h2>
               <p className="font-mono text-sm text-gray-300">
                 {currentGame.winner_id === currentPlayer?.id
