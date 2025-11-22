@@ -2,6 +2,7 @@ export enum GameMode {
   NONE = 'NONE',
   NUMBERS = 'NUMBERS',
   WORDS = 'WORDS',
+  BATTLESHIP = 'BATTLESHIP',
 }
 
 export enum PlayerType {
@@ -52,3 +53,28 @@ export interface GameConfig {
   wordLength: number;
   turnDurationSeconds: number;
 }
+
+// Battleship Types
+export type ShipType = 'carrier' | 'battleship' | 'cruiser' | 'destroyer' | 'submarine';
+
+export interface Ship {
+  type: ShipType;
+  length: number;
+  cells: [number, number][]; // координаты клеток [[row, col], ...]
+  hits: number; // количество попаданий
+  isPlaced?: boolean; // размещен ли корабль
+}
+
+export interface BattleshipHit {
+  cell: [number, number];
+  result: 'hit' | 'miss' | 'sunk';
+  shipType?: ShipType; // тип корабля, если попадание
+}
+
+export const SHIP_CONFIG: Record<ShipType, { length: number; name: string; icon: string }> = {
+  carrier: { length: 5, name: 'Авианосец', icon: '🚢' },
+  battleship: { length: 4, name: 'Линкор', icon: '⛴️' },
+  cruiser: { length: 3, name: 'Крейсер', icon: '🛳️' },
+  destroyer: { length: 3, name: 'Эсминец', icon: '⚓' },
+  submarine: { length: 2, name: 'Подлодка', icon: '🛥️' },
+};

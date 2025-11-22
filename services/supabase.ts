@@ -24,7 +24,7 @@ export interface Game {
   id: string;
   creator_id: string;
   opponent_id: string | null;
-  game_mode: 'NUMBERS' | 'WORDS';
+  game_mode: 'NUMBERS' | 'WORDS' | 'BATTLESHIP';
   status: 'WAITING' | 'SETUP' | 'PLAYING' | 'FINISHED';
   prize: string | null;
   game_name: string | null;
@@ -33,6 +33,10 @@ export interface Game {
   opponent_secret: string | null;
   creator_revealed_indices: boolean[];
   opponent_revealed_indices: boolean[];
+  creator_ships: any | null; // JSON корабли создателя для морского боя
+  opponent_ships: any | null; // JSON корабли оппонента для морского боя
+  creator_hits: any[]; // JSON выстрелы создателя для морского боя
+  opponent_hits: any[]; // JSON выстрелы оппонента для морского боя
   current_turn: string | null;
   winner_id: string | null;
   turn_count: number;
@@ -154,7 +158,7 @@ export class GameService {
   // Создать новую игру
   static async createGame(
     creatorId: string,
-    gameMode: 'NUMBERS' | 'WORDS',
+    gameMode: 'NUMBERS' | 'WORDS' | 'BATTLESHIP',
     prize?: string,
     gameName?: string,
     wordLength?: number
@@ -169,7 +173,9 @@ export class GameService {
         game_name: gameName || null,
         word_length: wordLength || 5,
         creator_revealed_indices: [],
-        opponent_revealed_indices: []
+        opponent_revealed_indices: [],
+        creator_hits: [],
+        opponent_hits: []
       }])
       .select()
       .single();
@@ -349,6 +355,64 @@ export class GameService {
         callback(games);
       })
       .subscribe();
+  }
+
+  // --- Методы для Морского боя ---
+
+  // Установить корабли игрока
+  static async setPlayerShips(
+    gameId: string,
+    playerId: string,
+    ships: any,
+    isCreator: boolean
+  ): Promise<void> {
+    const field = isCreator ? 'creator_ships' : 'opponent_ships';
+
+    await supabase
+      .from('games')
+      .update({ [field]: ships })
+      .eq('id', gameId);
+  }
+
+  // Добавить выстрел
+  static async addBattleshipHit(
+    gameId: string,
+    playerId: string,
+    hit: any,
+    isCreator: boolean
+  ): Promise<void> {
+    const field = isCreator ? 'creator_hits' : 'opponent_hits';
+
+    // Получаем текущие выстрелы
+    const { data: game } = await supabase
+      .from('games')
+      .select(field)
+      .eq('id', gameId)
+      .single();
+
+    if (!game) return;
+
+    const currentHits = game[field] || [];
+    const updatedHits = [...currentHits, hit];
+
+    await supabase
+      .from('games')
+      .update({ [field]: updatedHits })
+      .eq('id', gameId);
+  }
+
+  // Обновить корабли после попадания
+  static async updateShipsAfterHit(
+    gameId: string,
+    ships: any,
+    isCreator: boolean
+  ): Promise<void> {
+    const field = isCreator ? 'creator_ships' : 'opponent_ships';
+
+    await supabase
+      .from('games')
+      .update({ [field]: ships })
+      .eq('id', gameId);
   }
 }
 
