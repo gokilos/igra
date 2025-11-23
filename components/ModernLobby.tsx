@@ -13,7 +13,7 @@ interface ModernLobbyProps {
   onLogout: () => void;
   onBack: () => void;
   onEditNickname?: () => void;
-  getPlayerAvatar: (player: any) => JSX.Element;
+  getPlayerAvatar: (player: any) => React.JSX.Element;
   selectedMode?: GameMode;
 }
 

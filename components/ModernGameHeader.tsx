@@ -3,7 +3,7 @@ import React from 'react';
 interface Player {
   id: string;
   name: string;
-  avatar: JSX.Element;
+  avatar: React.JSX.Element;
   score?: number;
 }
 

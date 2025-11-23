@@ -847,7 +847,7 @@ const App: React.FC = () => {
     return CHARACTERS.find(c => c.id === characterId) || null;
   };
 
-  const getPlayerAvatar = (player: Player): JSX.Element => {
+  const getPlayerAvatar = (player: Player): React.JSX.Element => {
     const character = getCharacterById(player.avatar);
     if (character?.avatarPath) {
       return (
@@ -875,7 +875,7 @@ const App: React.FC = () => {
     return opponent?.login || opponent?.nickname || '???';
   };
 
-  const getOpponentAvatar = (): JSX.Element => {
+  const getOpponentAvatar = (): React.JSX.Element => {
     if (!currentGame) return <span>?</span>;
     const opponentId = isCreator ? currentGame.opponent_id : currentGame.creator_id;
     const opponent = onlinePlayers.find(p => p.id === opponentId);
