@@ -139,7 +139,10 @@ export const BattleshipGrid: React.FC<BattleshipGridProps> = ({
           {Array.from({ length: GRID_SIZE }, (_, col) => (
             <button
               key={col}
-              onClick={() => onCellClick(row, col)}
+              onClick={() => {
+                console.log('Cell clicked:', row, col, 'mode:', mode, 'isMyTurn:', isMyTurn);
+                onCellClick(row, col);
+              }}
               disabled={mode === 'playing' && (!isMyTurn || isCellHit(row, col, hits))}
               className={getCellClassName(row, col)}
               aria-label={`Клетка ${rowToLetter(row)}${col + 1}`}

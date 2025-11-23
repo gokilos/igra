@@ -228,16 +228,22 @@ export class GameService {
       .eq('id', gameId);
   }
 
-  // Проверить, готовы ли оба игрока (установили секреты)
+  // Проверить, готовы ли оба игрока (установили секреты или корабли)
   static async checkBothPlayersReady(gameId: string): Promise<boolean> {
     const { data, error } = await supabase
       .from('games')
-      .select('creator_secret, opponent_secret')
+      .select('game_mode, creator_secret, opponent_secret, creator_ships, opponent_ships')
       .eq('id', gameId)
       .single();
 
     if (error) return false;
 
+    // Для морского боя проверяем корабли
+    if (data?.game_mode === 'BATTLESHIP') {
+      return !!(data?.creator_ships && data?.opponent_ships);
+    }
+
+    // Для остальных режимов проверяем секреты
     return !!(data?.creator_secret && data?.opponent_secret);
   }
 

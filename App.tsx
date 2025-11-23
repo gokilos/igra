@@ -268,17 +268,19 @@ const App: React.FC = () => {
 
         // Update data for Battleship mode
         if (game.game_mode === 'BATTLESHIP') {
-          if (game.creator_ships) {
-            const ships = amCreator ? game.creator_ships : game.opponent_ships;
-            if (ships) setMyShips(ships);
-          }
-          if (game.opponent_ships && !amCreator) {
-            setOpponentShips(game.opponent_ships);
-          }
-          if (game.creator_ships && amCreator) {
-            setOpponentShips(game.creator_ships);
+          // Обновляем свои корабли
+          const myShipsData = amCreator ? game.creator_ships : game.opponent_ships;
+          if (myShipsData) {
+            setMyShips(myShipsData);
           }
 
+          // Обновляем корабли оппонента
+          const oppShipsData = amCreator ? game.opponent_ships : game.creator_ships;
+          if (oppShipsData) {
+            setOpponentShips(oppShipsData);
+          }
+
+          // Обновляем выстрелы
           const myHitsData = amCreator ? game.creator_hits : game.opponent_hits;
           const oppHitsData = amCreator ? game.opponent_hits : game.creator_hits;
           if (myHitsData) setMyHits(myHitsData);
@@ -448,8 +450,9 @@ const App: React.FC = () => {
         setSelectedShip(null);
         setShipOrientation('horizontal');
       } else {
-        setFeedback(joinedGame.game_mode === 'NUMBERS' ? 'ЗАГАДАЙ 4 ЦИФРЫ' : 'ЗАГАДАЙ СЛОВО (5 БУКВ)');
-        const len = joinedGame.game_mode === 'NUMBERS' ? NUM_LENGTH : WORD_LENGTH;
+        const wordLen = joinedGame.word_length || 5;
+        setFeedback(joinedGame.game_mode === 'NUMBERS' ? 'ЗАГАДАЙ 4 ЦИФРЫ' : `ЗАГАДАЙ СЛОВО (${wordLen} БУКВ)`);
+        const len = joinedGame.game_mode === 'NUMBERS' ? NUM_LENGTH : wordLen;
         setMyRevealedIndices(Array(len).fill(false));
         setOpponentRevealedIndices(Array(len).fill(false));
       }
@@ -459,7 +462,7 @@ const App: React.FC = () => {
   const handleSetupSubmit = async () => {
     if (!currentPlayer || !currentGame || isSubmitting) return;
 
-    const len = gameMode === GameMode.NUMBERS ? NUM_LENGTH : WORD_LENGTH;
+    const len = gameMode === GameMode.NUMBERS ? NUM_LENGTH : (currentGame.word_length || 5);
     if (currentInput.length !== len) return;
 
     setIsSubmitting(true);
@@ -484,7 +487,7 @@ const App: React.FC = () => {
   const handleSubmitGuess = async () => {
     if (!currentPlayer || !currentGame || isSubmitting) return;
 
-    const len = gameMode === GameMode.NUMBERS ? NUM_LENGTH : WORD_LENGTH;
+    const len = gameMode === GameMode.NUMBERS ? NUM_LENGTH : (currentGame.word_length || 5);
     if (currentInput.length !== len) return;
     if (currentGame.current_turn !== currentPlayer.id) return;
 
@@ -548,7 +551,7 @@ const App: React.FC = () => {
   };
 
   const handleInput = (char: string) => {
-    const maxLen = gameMode === GameMode.NUMBERS ? NUM_LENGTH : WORD_LENGTH;
+    const maxLen = gameMode === GameMode.NUMBERS ? NUM_LENGTH : (currentGame?.word_length || 5);
     if (currentInput.length < maxLen) {
       setCurrentInput(prev => prev + char);
     }
@@ -810,7 +813,7 @@ const App: React.FC = () => {
   const renderSecretDisplay = (isMine: boolean) => {
     const secret = isMine ? mySecret : opponentSecret;
     const revealed = isMine ? myRevealedIndices : opponentRevealedIndices;
-    const length = gameMode === GameMode.NUMBERS ? NUM_LENGTH : WORD_LENGTH;
+    const length = gameMode === GameMode.NUMBERS ? NUM_LENGTH : (currentGame?.word_length || 5);
 
     // During setup, show current input
     if (status === GameStatus.SETUP && isMine) {
@@ -1460,7 +1463,7 @@ const App: React.FC = () => {
           {/* Input Display */}
           {((status === GameStatus.PLAYING && currentGame?.current_turn === currentPlayer?.id) || status === GameStatus.SETUP) && (
             <div className="flex justify-center gap-2 mb-4">
-              {Array.from({ length: gameMode === GameMode.NUMBERS ? NUM_LENGTH : WORD_LENGTH }).map((_, i) => (
+              {Array.from({ length: gameMode === GameMode.NUMBERS ? NUM_LENGTH : (currentGame?.word_length || 5) }).map((_, i) => (
                 <div key={i} className="w-10 h-12 border-b-2 border-white flex items-center justify-center text-xl font-mono text-white">
                   {currentInput[i] || ''}
                 </div>
