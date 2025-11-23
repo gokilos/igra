@@ -87,6 +87,8 @@ const App: React.FC = () => {
   const [newGameName, setNewGameName] = useState('');
   const [newGameMode, setNewGameMode] = useState<GameMode>(GameMode.NUMBERS);
   const [newWordLength, setNewWordLength] = useState<number>(5);
+  const [gameFilter, setGameFilter] = useState<'all' | 'active' | 'mine'>('active');
+  const [hiddenGames, setHiddenGames] = useState<Set<string>>(new Set());
 
   // Invitation State
   const [showInviteModal, setShowInviteModal] = useState(false);
@@ -903,136 +905,288 @@ const App: React.FC = () => {
     );
   };
 
-  const renderLobby = () => (
-    <div className="flex flex-col h-screen p-4 animate-fadeIn bg-squid-dark">
-      <div className="text-center space-y-2 mb-4">
-        <h1 className="text-3xl font-black tracking-widest text-white">
-          ИГРА В<br/><span className="text-squid-pink">КАЛЬМАРА</span>
-        </h1>
-        <div className="flex items-center justify-center gap-2">
-          <p className="text-squid-green font-mono text-xs tracking-widest">
-            ВАШ ID: {currentPlayer?.login || currentPlayer?.nickname}
-          </p>
-          {currentPlayer && getPlayerAvatar(currentPlayer)}
+  const renderLobby = () => {
+    // Фильтрация игр
+    const filteredGames = waitingGames.filter(game => {
+      // Исключаем скрытые игры
+      if (hiddenGames.has(game.id)) return false;
+
+      // Применяем фильтр
+      if (gameFilter === 'mine') {
+        return game.creator_id === currentPlayer?.id;
+      } else if (gameFilter === 'active') {
+        return game.status === 'WAITING';
+      }
+      return true; // 'all'
+    });
+
+    const handleHideGame = (gameId: string) => {
+      setHiddenGames(prev => {
+        const newSet = new Set(prev);
+        newSet.add(gameId);
+        return newSet;
+      });
+      haptic.light();
+    };
+
+    const handleShowAllGames = () => {
+      setHiddenGames(new Set());
+      haptic.light();
+    };
+
+    // Получить градиент для режима игры
+    const getGameModeGradient = (mode: string) => {
+      switch(mode) {
+        case 'NUMBERS':
+          return 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
+        case 'WORDS':
+          return 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)';
+        case 'BATTLESHIP':
+          return 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)';
+        default:
+          return 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
+      }
+    };
+
+    return (
+      <div className="relative flex flex-col h-screen overflow-hidden gradient-purple-dark">
+        {/* Animated Background */}
+        <div className="absolute inset-0 opacity-30">
+          <div className="absolute top-0 left-0 w-96 h-96 bg-purple-500 rounded-full mix-blend-multiply filter blur-3xl animate-pulse"></div>
+          <div className="absolute bottom-0 right-0 w-96 h-96 bg-pink-500 rounded-full mix-blend-multiply filter blur-3xl animate-pulse animation-delay-300"></div>
         </div>
-        <div className="text-yellow-400 font-mono text-sm">
-          ОНЛАЙН: {onlineCount} игроков
-        </div>
-      </div>
 
-      {/* Create Game Button */}
-      <button
-        onClick={() => {
-          haptic.medium();
-          setShowCreateGameModal(true);
-        }}
-        className="w-full bg-squid-pink hover:bg-pink-700 text-white font-bold py-3 px-4 rounded mb-4 tracking-wider"
-      >
-        + СОЗДАТЬ СВОЮ ИГРУ
-      </button>
-
-      {/* Waiting Games */}
-      <div className="overflow-y-auto bg-gray-900/50 border border-gray-800 rounded p-3 mb-4" style={{ minHeight: '400px', maxHeight: '60vh' }}>
-        <h2 className="text-xs font-mono text-gray-500 mb-3 border-b border-gray-700 pb-2">
-          АКТИВНЫЕ ИГРЫ ({waitingGames.length})
-        </h2>
-        <div className="space-y-3">
-          {waitingGames.length === 0 ? (
-            <div className="text-center text-gray-600 py-8 text-sm">
-              НЕТ АКТИВНЫХ ИГР<br/>
-              <span className="text-xs">СОЗДАЙ ПЕРВУЮ!</span>
-            </div>
-          ) : (
-            waitingGames.map((game) => {
-              const creator = onlinePlayers.find(p => p.id === game.creator_id);
-              const isMyGame = game.creator_id === currentPlayer?.id;
-
-              return (
-                <div key={game.id} className={`bg-squid-panel border p-3 rounded ${isMyGame ? 'border-squid-green' : 'border-gray-700'}`}>
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-3">
-                      <div className="flex items-center justify-center w-10 h-10">
-                        {creator ? getPlayerAvatar(creator) : <span>?</span>}
-                      </div>
-                      <div>
-                        <div className="text-white text-sm font-bold">
-                          {game.game_name || `Игра от ${creator?.login || creator?.nickname || 'Игрока'}`}
-                          {isMyGame && <span className="text-squid-green text-xs ml-2">(ваша)</span>}
-                        </div>
-                        <div className="text-[10px] text-gray-400">
-                          {game.game_mode === 'NUMBERS' ? '🔢 ЦИФРЫ' : game.game_mode === 'BATTLESHIP' ? '🚢 МОРСКОЙ БОЙ' : '📝 СЛОВА'} • от {creator?.login || creator?.nickname}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                  {game.prize && (
-                    <div className="bg-yellow-900/30 border border-yellow-600/50 rounded px-2 py-1 mb-2">
-                      <div className="text-[9px] text-yellow-600 font-bold">🏆 ПРИЗ:</div>
-                      <div className="text-xs text-yellow-400">{game.prize}</div>
-                    </div>
-                  )}
-                  {!isMyGame ? (
-                    <button
-                      onClick={() => {
-                        haptic.medium();
-                        handleJoinGame(game);
-                      }}
-                      className="w-full bg-squid-green hover:bg-green-700 text-black text-sm px-3 py-2 rounded font-bold tracking-wider"
-                    >
-                      ВСТУПИТЬ В ИГРУ
-                    </button>
-                  ) : (
-                    <div className="space-y-2">
-                      <div className="text-center text-xs text-gray-500 py-1">
-                        Ожидание оппонента...
-                      </div>
-                      <button
-                        onClick={() => {
-                          setCurrentGame(game);
-                          setShowInviteModal(true);
-                        }}
-                        className="w-full bg-blue-600 hover:bg-blue-700 text-white text-xs px-3 py-2 rounded font-bold"
-                      >
-                        📨 ПРИГЛАСИТЬ УЧАСТНИКОВ
-                      </button>
-                    </div>
-                  )}
+        {/* Content */}
+        <div className="relative z-10 flex flex-col h-full">
+          {/* Header */}
+          <div className="px-6 pt-6 pb-4">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <p className="text-xs text-gray-400 font-heading uppercase tracking-wider">Let's Equma</p>
+                <h1 className="text-4xl font-display font-black text-white tracking-tight">
+                  Best Games
+                </h1>
+              </div>
+              <div className="flex items-center gap-3">
+                <div className="text-right">
+                  <p className="text-xs text-gray-400">{currentPlayer?.login || currentPlayer?.nickname}</p>
+                  <p className="text-xs text-squid-green font-bold">{onlineCount} онлайн</p>
                 </div>
-              );
-            })
-          )}
-        </div>
-      </div>
-
-      {/* Online Players - показываем рядом */}
-      <div className="bg-gray-900/30 border border-gray-800 rounded p-3 mb-4">
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-xs font-mono text-gray-500">ОНЛАЙН ИГРОКИ</h3>
-          <button
-            onClick={handleLogout}
-            className="text-xs text-red-400 hover:text-red-300 font-mono"
-          >
-            ВЫЙТИ
-          </button>
-        </div>
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-          {onlinePlayers.slice(0, 12).map((player) => (
-            <div key={player.id} className="text-xs bg-gray-800/50 rounded px-2 py-1 flex items-center gap-2">
-              {getPlayerAvatar(player)}
-              <span className="text-gray-400 truncate">{player.login || player.nickname}</span>
+                {currentPlayer && (
+                  <div className="relative">
+                    {getPlayerAvatar(currentPlayer)}
+                    <div className="absolute -top-1 -right-1 w-3 h-3 bg-squid-green rounded-full border-2 border-gray-900"></div>
+                  </div>
+                )}
+                <button
+                  onClick={handleLogout}
+                  className="ml-2 text-xs text-gray-500 hover:text-red-400 transition-colors"
+                >
+                  🚪
+                </button>
+              </div>
             </div>
-          ))}
-        </div>
-        {onlinePlayers.length > 12 && (
-          <div className="text-xs text-gray-600 text-center mt-2">
-            +{onlinePlayers.length - 12} еще
-          </div>
-        )}
-        </div>
 
-      <div className="text-center text-gray-600 text-[10px] font-mono mt-2">
-        СЕРВЕР: ХАКАСИЯ-1 • ПОДКЛЮЧЕНИЕ СТАБИЛЬНО
+            {/* Filter Tabs */}
+            <div className="flex gap-3 mb-6">
+              <button
+                onClick={() => {
+                  setGameFilter('active');
+                  haptic.selection();
+                }}
+                className={`px-5 py-2 rounded-full font-heading font-semibold text-sm transition-all ${
+                  gameFilter === 'active'
+                    ? 'bg-squid-pink text-white shadow-lg shadow-pink-500/50'
+                    : 'bg-white/10 text-gray-400 hover:bg-white/20'
+                }`}
+              >
+                🔥 Активные
+              </button>
+              <button
+                onClick={() => {
+                  setGameFilter('all');
+                  haptic.selection();
+                }}
+                className={`px-5 py-2 rounded-full font-heading font-semibold text-sm transition-all ${
+                  gameFilter === 'all'
+                    ? 'bg-squid-pink text-white shadow-lg shadow-pink-500/50'
+                    : 'bg-white/10 text-gray-400 hover:bg-white/20'
+                }`}
+              >
+                Все
+              </button>
+              <button
+                onClick={() => {
+                  setGameFilter('mine');
+                  haptic.selection();
+                }}
+                className={`px-5 py-2 rounded-full font-heading font-semibold text-sm transition-all ${
+                  gameFilter === 'mine'
+                    ? 'bg-squid-pink text-white shadow-lg shadow-pink-500/50'
+                    : 'bg-white/10 text-gray-400 hover:bg-white/20'
+                }`}
+              >
+                Мои
+              </button>
+              <button
+                onClick={() => {
+                  setShowCreateGameModal(true);
+                  haptic.medium();
+                }}
+                className="ml-auto text-2xl hover:scale-110 transition-transform"
+              >
+                🔍
+              </button>
+            </div>
+          </div>
+
+          {/* Games Carousel */}
+          <div className="flex-1 overflow-hidden px-6 pb-24">
+            {hiddenGames.size > 0 && (
+              <div className="mb-4">
+                <button
+                  onClick={handleShowAllGames}
+                  className="text-xs text-gray-400 hover:text-white transition-colors"
+                >
+                  🔄 Показать все игры ({hiddenGames.size} скрыто)
+                </button>
+              </div>
+            )}
+
+            {filteredGames.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-full text-center">
+                <div className="text-6xl mb-4 opacity-20">🎮</div>
+                <h3 className="text-xl font-display font-bold text-white mb-2">Нет доступных игр</h3>
+                <p className="text-gray-400 text-sm mb-6">Создайте свою игру первым!</p>
+              </div>
+            ) : (
+              <div className="carousel-container flex gap-6 pb-4 snap-x snap-mandatory overflow-x-auto">
+                {filteredGames.map((game, index) => {
+                  const creator = onlinePlayers.find(p => p.id === game.creator_id);
+                  const isMyGame = game.creator_id === currentPlayer?.id;
+                  const gameGradient = getGameModeGradient(game.game_mode);
+
+                  return (
+                    <div
+                      key={game.id}
+                      className="carousel-item flex-shrink-0 w-[85vw] max-w-md animate-slide-in"
+                      style={{ animationDelay: `${index * 100}ms` }}
+                    >
+                      <div className="game-card relative h-[420px] rounded-3xl overflow-hidden shadow-2xl">
+                        {/* Background Image Placeholder */}
+                        <div
+                          className="absolute inset-0 game-card-image"
+                          style={{
+                            background: gameGradient,
+                            backgroundSize: 'cover',
+                            backgroundPosition: 'center'
+                          }}
+                        >
+                          {/* Overlay Gradient */}
+                          <div className="absolute inset-0 bg-gradient-to-t from-black via-black/60 to-transparent"></div>
+
+                          {/* Game Mode Icon/Placeholder */}
+                          <div className="absolute top-1/3 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-9xl opacity-20">
+                            {game.game_mode === 'NUMBERS' ? '🔢' : game.game_mode === 'BATTLESHIP' ? '🚢' : '📝'}
+                          </div>
+                        </div>
+
+                        {/* Content */}
+                        <div className="relative h-full flex flex-col justify-end p-6">
+                          {/* Hide Button */}
+                          <button
+                            onClick={() => handleHideGame(game.id)}
+                            className="absolute top-4 right-4 w-10 h-10 bg-black/50 backdrop-blur-sm rounded-full flex items-center justify-center hover:bg-black/70 transition-all"
+                          >
+                            <span className="text-xl">👁️‍🗨️</span>
+                          </button>
+
+                          {/* Prize Badge */}
+                          {game.prize && (
+                            <div className="absolute top-4 left-4 px-3 py-1.5 bg-yellow-500/90 backdrop-blur-sm rounded-full">
+                              <p className="text-xs font-bold text-black">🏆 {game.prize}</p>
+                            </div>
+                          )}
+
+                          {/* My Game Badge */}
+                          {isMyGame && (
+                            <div className="absolute top-16 left-4 px-3 py-1 bg-squid-green/90 backdrop-blur-sm rounded-full">
+                              <p className="text-xs font-bold text-black">✅ Ваша игра</p>
+                            </div>
+                          )}
+
+                          {/* Game Info */}
+                          <div className="mb-4">
+                            <h3 className="text-2xl font-display font-black text-white mb-2 line-clamp-2">
+                              {game.game_name || `Игра от ${creator?.login || creator?.nickname || 'Игрока'}`}
+                            </h3>
+                            <div className="flex items-center gap-3 mb-3">
+                              {creator && getPlayerAvatar(creator)}
+                              <div>
+                                <p className="text-sm font-heading font-semibold text-white">
+                                  {creator?.login || creator?.nickname || 'Игрок'}
+                                </p>
+                                <p className="text-xs text-gray-300">
+                                  {game.game_mode === 'NUMBERS' ? '🔢 Угадай числа' : game.game_mode === 'BATTLESHIP' ? '🚢 Морской бой' : '📝 Угадай слово'}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Action Button */}
+                          {!isMyGame ? (
+                            <button
+                              onClick={() => {
+                                haptic.medium();
+                                handleJoinGame(game);
+                              }}
+                              className="w-full bg-white hover:bg-gray-100 text-black font-display font-bold py-4 px-6 rounded-2xl flex items-center justify-between group transition-all shadow-lg"
+                            >
+                              <span className="text-lg">Войти в игру</span>
+                              <span className="text-2xl transform group-hover:translate-x-2 transition-transform">→</span>
+                            </button>
+                          ) : (
+                            <div className="space-y-3">
+                              <div className="text-center py-3 bg-white/10 backdrop-blur-sm rounded-xl">
+                                <p className="text-sm text-gray-300">⏳ Ожидание оппонента...</p>
+                              </div>
+                              <button
+                                onClick={() => {
+                                  setCurrentGame(game);
+                                  setShowInviteModal(true);
+                                  haptic.light();
+                                }}
+                                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-heading font-bold py-3 px-6 rounded-2xl transition-all"
+                              >
+                                📨 Пригласить игроков
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Fixed Create Game Button */}
+          <div className="fixed bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-black via-gray-900/95 to-transparent backdrop-blur-lg z-20">
+            <button
+              onClick={() => {
+                haptic.medium();
+                setShowCreateGameModal(true);
+              }}
+              className="w-full bg-squid-pink hover:bg-pink-600 text-white font-display font-black py-5 px-8 rounded-2xl text-lg btn-glow transition-all transform hover:scale-[1.02] active:scale-[0.98]"
+            >
+              ✨ Создать свою игру
+            </button>
+          </div>
+        </div>
       </div>
+    );
+  };
       
 
       {/* Create Game Modal */}
