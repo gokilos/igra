@@ -1184,152 +1184,149 @@ const App: React.FC = () => {
             </button>
           </div>
         </div>
+
+        {/* Create Game Modal */}
+        {showCreateGameModal && (
+          <Modal onClose={() => setShowCreateGameModal(false)}>
+            <h2 className="text-2xl font-black text-squid-pink mb-4">СОЗДАТЬ ИГРУ</h2>
+
+            <div className="space-y-4 text-left">
+              <div>
+                <label className="text-xs text-gray-400 uppercase block mb-2">Название игры:</label>
+                <input
+                  type="text"
+                  value={newGameName}
+                  onChange={(e) => setNewGameName(e.target.value)}
+                  placeholder="Например: Игра за обед"
+                  maxLength={50}
+                  className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white text-sm focus:outline-none focus:border-squid-pink"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs text-gray-400 uppercase block mb-2">Режим игры:</label>
+                <div className="grid grid-cols-3 gap-2">
+                  <button
+                    onClick={() => setNewGameMode(GameMode.NUMBERS)}
+                    className={`py-2 px-3 rounded font-bold text-sm ${newGameMode === GameMode.NUMBERS ? 'bg-squid-pink text-white' : 'bg-gray-800 text-gray-400'}`}
+                  >
+                    🔢 ЦИФРЫ
+                  </button>
+                  <button
+                    onClick={() => setNewGameMode(GameMode.WORDS)}
+                    className={`py-2 px-3 rounded font-bold text-sm ${newGameMode === GameMode.WORDS ? 'bg-squid-green text-black' : 'bg-gray-800 text-gray-400'}`}
+                  >
+                    📝 СЛОВА
+                  </button>
+                  <button
+                    onClick={() => setNewGameMode(GameMode.BATTLESHIP)}
+                    className={`py-2 px-3 rounded font-bold text-sm ${newGameMode === GameMode.BATTLESHIP ? 'bg-blue-600 text-white' : 'bg-gray-800 text-gray-400'}`}
+                  >
+                    🚢 МОРСКОЙ БОЙ
+                  </button>
+                </div>
+              </div>
+
+              {/* Длина слова - только для режима СЛОВА */}
+              {newGameMode === GameMode.WORDS && (
+                <div>
+                  <label className="text-xs text-gray-400 uppercase block mb-2">Длина слова:</label>
+                  <div className="flex gap-2">
+                    {[5, 6, 10].map(length => (
+                      <button
+                        key={length}
+                        onClick={() => setNewWordLength(length)}
+                        className={`flex-1 py-2 px-4 rounded font-bold ${newWordLength === length ? 'bg-squid-green text-black' : 'bg-gray-800 text-gray-400'}`}
+                      >
+                        {length} букв
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div>
+                <label className="text-xs text-gray-400 uppercase block mb-2">Приз (опционально):</label>
+                <input
+                  type="text"
+                  value={newGamePrize}
+                  onChange={(e) => setNewGamePrize(e.target.value)}
+                  placeholder="Например: 1000₽ или Кофе"
+                  maxLength={50}
+                  className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white text-sm focus:outline-none focus:border-squid-pink"
+                />
+              </div>
+
+              <button
+                onClick={() => {
+                  haptic.medium();
+                  handleCreateGame();
+                }}
+                className="w-full bg-squid-pink hover:bg-pink-700 text-white font-bold py-3 px-4 rounded tracking-wider"
+              >
+                СОЗДАТЬ
+              </button>
+            </div>
+          </Modal>
+        )}
+
+        {/* Invite Players Modal */}
+        {showInviteModal && currentGame && (
+          <Modal onClose={() => setShowInviteModal(false)}>
+            <h2 className="text-2xl font-black text-squid-pink mb-4">ПРИГЛАСИТЬ УЧАСТНИКОВ</h2>
+
+            {/* Search */}
+            <div className="mb-4">
+              <input
+                type="text"
+                value={inviteSearchQuery}
+                onChange={(e) => setInviteSearchQuery(e.target.value)}
+                placeholder="Поиск по логину..."
+                className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white text-sm focus:outline-none focus:border-squid-pink"
+              />
+            </div>
+
+            {/* Players List */}
+            <div className="max-h-96 overflow-y-auto space-y-2 mb-4">
+              {onlinePlayers
+                .filter(p =>
+                  !inviteSearchQuery ||
+                  p.login?.toLowerCase().includes(inviteSearchQuery.toLowerCase()) ||
+                  p.nickname?.toLowerCase().includes(inviteSearchQuery.toLowerCase())
+                )
+                .map(player => (
+                  <div
+                    key={player.id}
+                    className="bg-gray-800/50 rounded p-3 flex items-center justify-between border border-gray-700"
+                  >
+                    <div className="flex items-center gap-3">
+                      {getPlayerAvatar(player)}
+                      <div>
+                        <div className="text-sm text-white font-bold">
+                          {player.login || player.nickname}
+                        </div>
+                        <div className="text-xs text-gray-400">
+                          🟢 Онлайн
+                        </div>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => {
+                        handleSendInvitation(player.id);
+                        haptic.medium();
+                      }}
+                      className="bg-squid-green hover:bg-green-700 text-black text-xs px-3 py-2 rounded font-bold"
+                    >
+                      ПРИГЛАСИТЬ
+                    </button>
+                  </div>
+                ))}
+            </div>
+          </Modal>
+        )}
       </div>
     );
   };
-      
-
-      {/* Create Game Modal */}
-      {showCreateGameModal && (
-        <Modal onClose={() => setShowCreateGameModal(false)}>
-          <h2 className="text-2xl font-black text-squid-pink mb-4">СОЗДАТЬ ИГРУ</h2>
-
-          <div className="space-y-4 text-left">
-            <div>
-              <label className="text-xs text-gray-400 uppercase block mb-2">Название игры:</label>
-              <input
-                type="text"
-                value={newGameName}
-                onChange={(e) => setNewGameName(e.target.value)}
-                placeholder="Например: Игра за обед"
-                maxLength={50}
-                className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white text-sm focus:outline-none focus:border-squid-pink"
-              />
-            </div>
-
-            <div>
-              <label className="text-xs text-gray-400 uppercase block mb-2">Режим игры:</label>
-              <div className="grid grid-cols-3 gap-2">
-                <button
-                  onClick={() => setNewGameMode(GameMode.NUMBERS)}
-                  className={`py-2 px-3 rounded font-bold text-sm ${newGameMode === GameMode.NUMBERS ? 'bg-squid-pink text-white' : 'bg-gray-800 text-gray-400'}`}
-                >
-                  🔢 ЦИФРЫ
-                </button>
-                <button
-                  onClick={() => setNewGameMode(GameMode.WORDS)}
-                  className={`py-2 px-3 rounded font-bold text-sm ${newGameMode === GameMode.WORDS ? 'bg-squid-green text-black' : 'bg-gray-800 text-gray-400'}`}
-                >
-                  📝 СЛОВА
-                </button>
-                <button
-                  onClick={() => setNewGameMode(GameMode.BATTLESHIP)}
-                  className={`py-2 px-3 rounded font-bold text-sm ${newGameMode === GameMode.BATTLESHIP ? 'bg-blue-600 text-white' : 'bg-gray-800 text-gray-400'}`}
-                >
-                  🚢 МОРСКОЙ БОЙ
-                </button>
-              </div>
-            </div>
-
-            {/* Длина слова - только для режима СЛОВА */}
-            {newGameMode === GameMode.WORDS && (
-              <div>
-                <label className="text-xs text-gray-400 uppercase block mb-2">Длина слова:</label>
-                <div className="flex gap-2">
-                  {[5, 6, 10].map(length => (
-                    <button
-                      key={length}
-                      onClick={() => setNewWordLength(length)}
-                      className={`flex-1 py-2 px-4 rounded font-bold ${newWordLength === length ? 'bg-squid-green text-black' : 'bg-gray-800 text-gray-400'}`}
-                    >
-                      {length} букв
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            <div>
-              <label className="text-xs text-gray-400 uppercase block mb-2">Приз (опционально):</label>
-              <input
-                type="text"
-                value={newGamePrize}
-                onChange={(e) => setNewGamePrize(e.target.value)}
-                placeholder="Например: 1000₽ или Кофе"
-                maxLength={50}
-                className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white text-sm focus:outline-none focus:border-squid-pink"
-              />
-            </div>
-
-            <button
-              onClick={() => {
-                haptic.medium();
-                handleCreateGame();
-              }}
-              className="w-full bg-squid-pink hover:bg-pink-700 text-white font-bold py-3 px-4 rounded tracking-wider"
-            >
-              СОЗДАТЬ
-            </button>
-          </div>
-        </Modal>
-      )}
-
-      {/* Invite Players Modal */}
-      {showInviteModal && currentGame && (
-        <Modal onClose={() => setShowInviteModal(false)}>
-          <h2 className="text-2xl font-black text-squid-pink mb-4">ПРИГЛАСИТЬ УЧАСТНИКОВ</h2>
-
-          {/* Search */}
-          <div className="mb-4">
-            <input
-              type="text"
-              value={inviteSearchQuery}
-              onChange={(e) => setInviteSearchQuery(e.target.value)}
-              placeholder="Поиск по логину..."
-              className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white text-sm focus:outline-none focus:border-squid-pink"
-            />
-          </div>
-
-          {/* Players List */}
-          <div className="max-h-96 overflow-y-auto space-y-2 mb-4">
-            {onlinePlayers
-              .filter(p =>
-                !inviteSearchQuery ||
-                p.login?.toLowerCase().includes(inviteSearchQuery.toLowerCase()) ||
-                p.nickname?.toLowerCase().includes(inviteSearchQuery.toLowerCase())
-              )
-              .map(player => (
-                <div
-                  key={player.id}
-                  className="bg-gray-800/50 rounded p-3 flex items-center justify-between border border-gray-700"
-                >
-                  <div className="flex items-center gap-3">
-                    {getPlayerAvatar(player)}
-                    <div>
-                      <div className="text-sm text-white font-bold">
-                        {player.login || player.nickname}
-                      </div>
-                      <div className="text-xs text-gray-400">
-                        🟢 Онлайн
-                      </div>
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => {
-                      handleSendInvitation(player.id);
-                      haptic.medium();
-                    }}
-                    className="bg-squid-green hover:bg-green-700 text-black text-xs px-3 py-2 rounded font-bold"
-                  >
-                    ПРИГЛАСИТЬ
-                  </button>
-                </div>
-              ))}
-          </div>
-        </Modal>
-      )}
-    </div>
-  );
 
   const renderBattleshipGame = () => {
     if (status === GameStatus.SETUP) {
