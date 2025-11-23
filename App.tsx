@@ -696,6 +696,9 @@ const App: React.FC = () => {
         return; // Уже стреляли сюда
       }
 
+      // Легкая вибрация при выстреле
+      haptic.light();
+
       // Обновляем свои выстрелы
       setMyHits((prev) => [...prev, hit]);
       await GameService.addBattleshipHit(currentGame.id, currentPlayer.id, hit, isCreator);
@@ -705,6 +708,7 @@ const App: React.FC = () => {
         const updatedShips = updateShipsAfterHit(targetShips, hit);
         await GameService.updateShipsAfterHit(currentGame.id, updatedShips, !isCreator);
 
+        // Виброотклик успеха при попадании
         haptic.success();
 
         // Проверяем победу
@@ -712,14 +716,15 @@ const App: React.FC = () => {
           await GameService.finishGame(currentGame.id, currentPlayer.id);
           return;
         }
-      } else {
-        haptic.light();
-      }
 
-      // Переключаем ход
-      const nextPlayer = isCreator ? game.opponent_id : game.creator_id;
-      if (nextPlayer) {
-        await GameService.switchTurn(currentGame.id, nextPlayer);
+        // При попадании НЕ переключаем ход - игрок стреляет еще раз!
+        setFeedback(hit.result === 'sunk' ? '🔥 КОРАБЛЬ ПОТОПЛЕН! СТРЕЛЯЙ ЕЩЕ!' : '💥 ПОПАДАНИЕ! СТРЕЛЯЙ ЕЩЕ!');
+      } else {
+        // Промах - переключаем ход
+        const nextPlayer = isCreator ? game.opponent_id : game.creator_id;
+        if (nextPlayer) {
+          await GameService.switchTurn(currentGame.id, nextPlayer);
+        }
       }
     } finally {
       setIsSubmitting(false);
