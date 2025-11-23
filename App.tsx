@@ -858,7 +858,11 @@ const App: React.FC = () => {
     }
 
     // Fallback к символу аватара
-    return <span className="text-lg">{player.avatar}</span>;
+    return (
+      <div className="w-full h-full rounded-full bg-gradient-to-br from-gray-700 to-gray-900 flex items-center justify-center">
+        <span className="text-lg">{player.avatar}</span>
+      </div>
+    );
   };
 
   const getOpponentNickname = (): string => {
@@ -995,7 +999,7 @@ const App: React.FC = () => {
                   <p className="text-xs text-squid-green font-bold">{onlineCount} онлайн</p>
                 </div>
                 {currentPlayer && (
-                  <div className="relative">
+                  <div className="relative w-10 h-10">
                     {getPlayerAvatar(currentPlayer)}
                     <div className="absolute -top-1 -right-1 w-3 h-3 bg-squid-green rounded-full border-2 border-gray-900"></div>
                   </div>
@@ -1143,7 +1147,11 @@ const App: React.FC = () => {
                               {game.game_name || `Игра от ${creator?.login || creator?.nickname || 'Игрока'}`}
                             </h3>
                             <div className="flex items-center gap-3 mb-3">
-                              {creator && getPlayerAvatar(creator)}
+                              {creator && (
+                                <div className="w-12 h-12 flex-shrink-0">
+                                  {getPlayerAvatar(creator)}
+                                </div>
+                              )}
                               <div>
                                 <p className="text-sm font-heading font-semibold text-white">
                                   {creator?.login || creator?.nickname || 'Игрок'}
@@ -1396,7 +1404,9 @@ const App: React.FC = () => {
                     className="bg-gray-800/50 rounded p-3 flex items-center justify-between border border-gray-700"
                   >
                     <div className="flex items-center gap-3">
-                      {getPlayerAvatar(player)}
+                      <div className="w-10 h-10 flex-shrink-0">
+                        {getPlayerAvatar(player)}
+                      </div>
                       <div>
                         <div className="text-sm text-white font-bold">
                           {player.login || player.nickname}
@@ -1648,7 +1658,7 @@ const App: React.FC = () => {
             {/* Левый шейп - Я */}
             <div className="bg-gradient-to-br from-blue-600/20 to-purple-600/20 backdrop-blur-sm rounded-2xl p-3 border border-blue-500/30">
               <div className="flex items-center gap-2 mb-2">
-                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center text-white font-bold shadow-lg">
+                <div className="w-10 h-10 rounded-full overflow-hidden flex items-center justify-center text-white font-bold shadow-lg ring-2 ring-blue-500/50">
                   {currentPlayer && getPlayerAvatar(currentPlayer)}
                 </div>
                 <div className="flex-1 min-w-0">
@@ -1686,7 +1696,7 @@ const App: React.FC = () => {
             {/* Правый шейп - Оппонент */}
             <div className="bg-gradient-to-br from-pink-600/20 to-orange-600/20 backdrop-blur-sm rounded-2xl p-3 border border-pink-500/30">
               <div className="flex items-center gap-2 mb-2">
-                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-pink-500 to-orange-500 flex items-center justify-center text-white font-bold shadow-lg">
+                <div className="w-10 h-10 rounded-full overflow-hidden flex items-center justify-center text-white font-bold shadow-lg ring-2 ring-pink-500/50">
                   {getOpponentAvatar()}
                 </div>
                 <div className="flex-1 min-w-0">
