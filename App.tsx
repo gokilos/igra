@@ -1,10 +1,12 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { GameMode, GameStatus, AppScreen, Character } from './types';
+import { GameMode, GameStatus, AppScreen, Character, Ship, ShipType, BattleshipHit } from './types';
 import { generateAISecretNumber, generateAISecretWord } from './services/ai';
 import Timer from './components/Timer';
 import { Keyboard } from './components/Keyboard';
 import { StartScreen } from './components/StartScreen';
 import { CharacterSelection } from './components/CharacterSelection';
+import { BattleshipGrid } from './components/BattleshipGrid';
+import { ShipPlacer } from './components/ShipPlacer';
 import { CHARACTERS } from './data/characters';
 import { haptic } from './utils/haptic';
 import {
@@ -19,6 +21,16 @@ import {
   startHeartbeat,
   supabase
 } from './services/supabase';
+import {
+  createEmptyShips,
+  placeShip,
+  generateRandomShips,
+  checkHit,
+  updateShipsAfterHit,
+  checkWin,
+  areAllShipsPlaced,
+  isValidPlacement
+} from './utils/battleship';
 
 // --- Constants ---
 const NUM_LENGTH = 4;
@@ -94,6 +106,16 @@ const App: React.FC = () => {
 
   // Submit State
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Battleship State
+  const [myShips, setMyShips] = useState<Ship[]>([]);
+  const [opponentShips, setOpponentShips] = useState<Ship[]>([]);
+  const [myHits, setMyHits] = useState<BattleshipHit[]>([]);
+  const [opponentHits, setOpponentHits] = useState<BattleshipHit[]>([]);
+  const [selectedShip, setSelectedShip] = useState<ShipType | null>(null);
+  const [shipOrientation, setShipOrientation] = useState<'horizontal' | 'vertical'>('horizontal');
+  const [highlightCells, setHighlightCells] = useState<[number, number][]>([]);
+  const [highlightValid, setHighlightValid] = useState(true);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const stopHeartbeatRef = useRef<(() => void) | null>(null);
@@ -209,6 +231,8 @@ const App: React.FC = () => {
         console.log('Game update received:', game);
         setCurrentGame(game);
 
+        const amCreator = game.creator_id === currentPlayer?.id;
+
         // Check if both players are ready to start
         if (game.status === 'SETUP') {
           const ready = await GameService.checkBothPlayersReady(game.id);
@@ -233,6 +257,11 @@ const App: React.FC = () => {
             haptic.medium();
           }
 
+          // Виброотклик успеха когда оппонент завершил свой ход
+          if (!isMyTurn && wasMyTurn) {
+            haptic.success();
+          }
+
           setFeedback(isMyTurn ? 'ТВОЙ ХОД' : 'ХОД ОППОНЕНТА');
           setTimerResetKey(k => k + 1);
         }
@@ -240,17 +269,44 @@ const App: React.FC = () => {
         // Check for winner
         if (game.status === 'FINISHED') {
           setStatus(GameStatus.GAME_OVER);
+
+          // Виброотклик при окончании игры (успех если победил, ошибка если проиграл)
+          if (game.winner_id === currentPlayer?.id) {
+            haptic.success();
+          } else {
+            haptic.error();
+          }
         }
 
-        // Update revealed indices and secrets
-        const amCreator = game.creator_id === currentPlayer?.id;
-        setMyRevealedIndices(amCreator ? game.creator_revealed_indices : game.opponent_revealed_indices);
-        setOpponentRevealedIndices(amCreator ? game.opponent_revealed_indices : game.creator_revealed_indices);
+        // Update data for Battleship mode
+        if (game.game_mode === 'BATTLESHIP') {
+          // Обновляем свои корабли
+          const myShipsData = amCreator ? game.creator_ships : game.opponent_ships;
+          if (myShipsData) {
+            setMyShips(myShipsData);
+          }
 
-        // Update secrets if they exist
-        if (game.creator_secret && game.opponent_secret) {
-          setMySecret(amCreator ? game.creator_secret : game.opponent_secret);
-          setOpponentSecret(amCreator ? game.opponent_secret : game.creator_secret);
+          // Обновляем корабли оппонента
+          const oppShipsData = amCreator ? game.opponent_ships : game.creator_ships;
+          if (oppShipsData) {
+            setOpponentShips(oppShipsData);
+          }
+
+          // Обновляем выстрелы
+          const myHitsData = amCreator ? game.creator_hits : game.opponent_hits;
+          const oppHitsData = amCreator ? game.opponent_hits : game.creator_hits;
+          if (myHitsData) setMyHits(myHitsData);
+          if (oppHitsData) setOpponentHits(oppHitsData);
+        } else {
+          // Update revealed indices and secrets for NUMBERS/WORDS
+          setMyRevealedIndices(amCreator ? game.creator_revealed_indices : game.opponent_revealed_indices);
+          setOpponentRevealedIndices(amCreator ? game.opponent_revealed_indices : game.creator_revealed_indices);
+
+          // Update secrets if they exist
+          if (game.creator_secret && game.opponent_secret) {
+            setMySecret(amCreator ? game.creator_secret : game.opponent_secret);
+            setOpponentSecret(amCreator ? game.opponent_secret : game.creator_secret);
+          }
         }
       });
 
@@ -362,15 +418,30 @@ const App: React.FC = () => {
       setGameMode(newGameMode);
       setIsCreator(true);
       setStatus(GameStatus.SETUP);
-      const wordLen = game.word_length || newWordLength;
-      setFeedback(newGameMode === GameMode.NUMBERS ? 'ЗАГАДАЙ 4 ЦИФРЫ' : `ЗАГАДАЙ СЛОВО (${wordLen} БУКВ)`);
+
+      // Инициализация для разных режимов
+      if (newGameMode === GameMode.BATTLESHIP) {
+        setFeedback('РАССТАВЬ СВОИ КОРАБЛИ');
+        setMyShips(createEmptyShips());
+        setOpponentShips([]);
+        setMyHits([]);
+        setOpponentHits([]);
+        setSelectedShip(null);
+        setShipOrientation('horizontal');
+      } else {
+        const wordLen = game.word_length || newWordLength;
+        setFeedback(newGameMode === GameMode.NUMBERS ? 'ЗАГАДАЙ 4 ЦИФРЫ' : `ЗАГАДАЙ СЛОВО (${wordLen} БУКВ)`);
+        const len = newGameMode === GameMode.NUMBERS ? NUM_LENGTH : wordLen;
+        setMyRevealedIndices(Array(len).fill(false));
+        setOpponentRevealedIndices(Array(len).fill(false));
+      }
+
       setShowCreateGameModal(false);
       setNewGamePrize('');
       setNewGameName('');
 
-      const len = newGameMode === GameMode.NUMBERS ? NUM_LENGTH : wordLen;
-      setMyRevealedIndices(Array(len).fill(false));
-      setOpponentRevealedIndices(Array(len).fill(false));
+      // Виброотклик успеха при создании игры
+      haptic.success();
     }
   };
 
@@ -383,24 +454,42 @@ const App: React.FC = () => {
       setGameMode(joinedGame.game_mode as GameMode);
       setIsCreator(false);
       setStatus(GameStatus.SETUP);
-      setFeedback(joinedGame.game_mode === 'NUMBERS' ? 'ЗАГАДАЙ 4 ЦИФРЫ' : 'ЗАГАДАЙ СЛОВО (5 БУКВ)');
 
-      const len = joinedGame.game_mode === 'NUMBERS' ? NUM_LENGTH : WORD_LENGTH;
-      setMyRevealedIndices(Array(len).fill(false));
-      setOpponentRevealedIndices(Array(len).fill(false));
+      // Инициализация для разных режимов
+      if (joinedGame.game_mode === 'BATTLESHIP') {
+        setFeedback('РАССТАВЬ СВОИ КОРАБЛИ');
+        setMyShips(createEmptyShips());
+        setOpponentShips([]);
+        setMyHits([]);
+        setOpponentHits([]);
+        setSelectedShip(null);
+        setShipOrientation('horizontal');
+      } else {
+        const wordLen = joinedGame.word_length || 5;
+        setFeedback(joinedGame.game_mode === 'NUMBERS' ? 'ЗАГАДАЙ 4 ЦИФРЫ' : `ЗАГАДАЙ СЛОВО (${wordLen} БУКВ)`);
+        const len = joinedGame.game_mode === 'NUMBERS' ? NUM_LENGTH : wordLen;
+        setMyRevealedIndices(Array(len).fill(false));
+        setOpponentRevealedIndices(Array(len).fill(false));
+      }
+
+      // Виброотклик успеха при присоединении к игре
+      haptic.success();
     }
   };
 
   const handleSetupSubmit = async () => {
     if (!currentPlayer || !currentGame || isSubmitting) return;
 
-    const len = gameMode === GameMode.NUMBERS ? NUM_LENGTH : WORD_LENGTH;
+    const len = gameMode === GameMode.NUMBERS ? NUM_LENGTH : (currentGame.word_length || 5);
     if (currentInput.length !== len) return;
 
     setIsSubmitting(true);
     try {
       setMySecret(currentInput);
       await GameService.setPlayerSecret(currentGame.id, currentPlayer.id, currentInput, isCreator);
+
+      // Виброотклик успеха при установке секрета
+      haptic.success();
 
       setFeedback('ОЖИДАНИЕ ОППОНЕНТА...');
       setCurrentInput('');
@@ -419,11 +508,14 @@ const App: React.FC = () => {
   const handleSubmitGuess = async () => {
     if (!currentPlayer || !currentGame || isSubmitting) return;
 
-    const len = gameMode === GameMode.NUMBERS ? NUM_LENGTH : WORD_LENGTH;
+    const len = gameMode === GameMode.NUMBERS ? NUM_LENGTH : (currentGame.word_length || 5);
     if (currentInput.length !== len) return;
     if (currentGame.current_turn !== currentPlayer.id) return;
 
     console.log('Submitting guess:', currentInput);
+
+    // Легкая вибрация при отправке попытки
+    haptic.light();
 
     setIsSubmitting(true);
     try {
@@ -464,6 +556,11 @@ const App: React.FC = () => {
       const guessResult = await GuessService.addGuess(currentGame.id, currentPlayer.id, guess, resultText, matchCount);
       console.log('Guess added to DB:', guessResult);
 
+      // Виброотклик в зависимости от результата
+      if (isWin || matchCount > 0) {
+        haptic.success();
+      }
+
       if (isWin) {
         console.log('Game won! Finishing game...');
         await GameService.finishGame(currentGame.id, currentPlayer.id);
@@ -483,13 +580,17 @@ const App: React.FC = () => {
   };
 
   const handleInput = (char: string) => {
-    const maxLen = gameMode === GameMode.NUMBERS ? NUM_LENGTH : WORD_LENGTH;
+    const maxLen = gameMode === GameMode.NUMBERS ? NUM_LENGTH : (currentGame?.word_length || 5);
     if (currentInput.length < maxLen) {
+      haptic.selection();
       setCurrentInput(prev => prev + char);
     }
   };
 
   const handleDelete = () => {
+    if (currentInput.length > 0) {
+      haptic.selection();
+    }
     setCurrentInput(prev => prev.slice(0, -1));
   };
 
@@ -520,6 +621,151 @@ const App: React.FC = () => {
     setOpponentSecret('');
     setMyRevealedIndices([]);
     setOpponentRevealedIndices([]);
+    setMyShips([]);
+    setOpponentShips([]);
+    setMyHits([]);
+    setOpponentHits([]);
+    setSelectedShip(null);
+    setShipOrientation('horizontal');
+  };
+
+  // --- Battleship Handlers ---
+
+  const handleBattleshipCellClick = (row: number, col: number) => {
+    if (status === GameStatus.SETUP && selectedShip) {
+      // Размещение корабля
+      const ship = myShips.find((s) => s.type === selectedShip);
+      if (!ship || ship.isPlaced) return;
+
+      const placedShip = placeShip(ship, row, col, shipOrientation === 'horizontal', myShips);
+      if (placedShip) {
+        setMyShips((prev) =>
+          prev.map((s) => (s.type === selectedShip ? placedShip : s))
+        );
+        haptic.light();
+        setHighlightCells([]);
+        setSelectedShip(null);
+      } else {
+        haptic.error();
+      }
+    } else if (status === GameStatus.PLAYING && currentGame?.current_turn === currentPlayer?.id) {
+      // Выстрел
+      handleBattleshipFire(row, col);
+    }
+  };
+
+  const handleBattleshipCellHover = (row: number, col: number) => {
+    if (status !== GameStatus.SETUP || !selectedShip) {
+      setHighlightCells([]);
+      return;
+    }
+
+    const ship = myShips.find((s) => s.type === selectedShip);
+    if (!ship || ship.isPlaced) {
+      setHighlightCells([]);
+      return;
+    }
+
+    const cells: [number, number][] = [];
+    for (let i = 0; i < ship.length; i++) {
+      const r = shipOrientation === 'horizontal' ? row : row + i;
+      const c = shipOrientation === 'horizontal' ? col + i : col;
+      cells.push([r, c]);
+    }
+
+    const valid = isValidPlacement(ship, row, col, shipOrientation === 'horizontal', myShips);
+    setHighlightCells(cells);
+    setHighlightValid(valid);
+  };
+
+  const handleRandomizeShips = () => {
+    const randomShips = generateRandomShips();
+    setMyShips(randomShips);
+    setSelectedShip(null);
+    haptic.medium();
+  };
+
+  const handleClearShips = () => {
+    setMyShips(createEmptyShips());
+    setSelectedShip(null);
+    haptic.light();
+  };
+
+  const handleBattleshipSetupSubmit = async () => {
+    if (!currentPlayer || !currentGame || !areAllShipsPlaced(myShips)) return;
+
+    setIsSubmitting(true);
+    try {
+      await GameService.setPlayerShips(currentGame.id, currentPlayer.id, myShips, isCreator);
+
+      // Виброотклик успеха при расстановке кораблей
+      haptic.success();
+
+      setFeedback('ОЖИДАНИЕ ОППОНЕНТА...');
+
+      // Проверка готовности обоих игроков
+      const ready = await GameService.checkBothPlayersReady(currentGame.id);
+      if (ready && isCreator) {
+        await GameService.startGame(currentGame.id, currentPlayer.id);
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleBattleshipFire = async (row: number, col: number) => {
+    if (!currentPlayer || !currentGame || isSubmitting) return;
+    if (currentGame.current_turn !== currentPlayer.id) return;
+
+    setIsSubmitting(true);
+    try {
+      const game = await GameService.getGame(currentGame.id);
+      if (!game) return;
+
+      // Получаем корабли оппонента
+      const targetShips = isCreator ? game.opponent_ships : game.creator_ships;
+      if (!targetShips) return;
+
+      // Проверяем попадание
+      const hit = checkHit(row, col, targetShips, myHits);
+      if (!hit) {
+        setIsSubmitting(false);
+        return; // Уже стреляли сюда
+      }
+
+      // Легкая вибрация при выстреле
+      haptic.light();
+
+      // Обновляем свои выстрелы
+      setMyHits((prev) => [...prev, hit]);
+      await GameService.addBattleshipHit(currentGame.id, currentPlayer.id, hit, isCreator);
+
+      // Если попадание, обновляем корабли
+      if (hit.result !== 'miss') {
+        const updatedShips = updateShipsAfterHit(targetShips, hit);
+        await GameService.updateShipsAfterHit(currentGame.id, updatedShips, !isCreator);
+
+        // Виброотклик успеха при попадании
+        haptic.success();
+
+        // Проверяем победу
+        if (checkWin(updatedShips)) {
+          await GameService.finishGame(currentGame.id, currentPlayer.id);
+          return;
+        }
+
+        // При попадании НЕ переключаем ход - игрок стреляет еще раз!
+        setFeedback(hit.result === 'sunk' ? '🔥 КОРАБЛЬ ПОТОПЛЕН! СТРЕЛЯЙ ЕЩЕ!' : '💥 ПОПАДАНИЕ! СТРЕЛЯЙ ЕЩЕ!');
+      } else {
+        // Промах - переключаем ход
+        const nextPlayer = isCreator ? game.opponent_id : game.creator_id;
+        if (nextPlayer) {
+          await GameService.switchTurn(currentGame.id, nextPlayer);
+        }
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleLogout = () => {
@@ -609,7 +855,7 @@ const App: React.FC = () => {
   const renderSecretDisplay = (isMine: boolean) => {
     const secret = isMine ? mySecret : opponentSecret;
     const revealed = isMine ? myRevealedIndices : opponentRevealedIndices;
-    const length = gameMode === GameMode.NUMBERS ? NUM_LENGTH : WORD_LENGTH;
+    const length = gameMode === GameMode.NUMBERS ? NUM_LENGTH : (currentGame?.word_length || 5);
 
     // During setup, show current input
     if (status === GameStatus.SETUP && isMine) {
@@ -676,7 +922,10 @@ const App: React.FC = () => {
 
       {/* Create Game Button */}
       <button
-        onClick={() => setShowCreateGameModal(true)}
+        onClick={() => {
+          haptic.medium();
+          setShowCreateGameModal(true);
+        }}
         className="w-full bg-squid-pink hover:bg-pink-700 text-white font-bold py-3 px-4 rounded mb-4 tracking-wider"
       >
         + СОЗДАТЬ СВОЮ ИГРУ
@@ -711,7 +960,7 @@ const App: React.FC = () => {
                           {isMyGame && <span className="text-squid-green text-xs ml-2">(ваша)</span>}
                         </div>
                         <div className="text-[10px] text-gray-400">
-                          {game.game_mode === 'NUMBERS' ? '🔢 ЦИФРЫ' : '📝 СЛОВА'} • от {creator?.login || creator?.nickname}
+                          {game.game_mode === 'NUMBERS' ? '🔢 ЦИФРЫ' : game.game_mode === 'BATTLESHIP' ? '🚢 МОРСКОЙ БОЙ' : '📝 СЛОВА'} • от {creator?.login || creator?.nickname}
                         </div>
                       </div>
                     </div>
@@ -724,7 +973,10 @@ const App: React.FC = () => {
                   )}
                   {!isMyGame ? (
                     <button
-                      onClick={() => handleJoinGame(game)}
+                      onClick={() => {
+                        haptic.medium();
+                        handleJoinGame(game);
+                      }}
                       className="w-full bg-squid-green hover:bg-green-700 text-black text-sm px-3 py-2 rounded font-bold tracking-wider"
                     >
                       ВСТУПИТЬ В ИГРУ
@@ -803,18 +1055,24 @@ const App: React.FC = () => {
 
             <div>
               <label className="text-xs text-gray-400 uppercase block mb-2">Режим игры:</label>
-              <div className="flex gap-2">
+              <div className="grid grid-cols-3 gap-2">
                 <button
                   onClick={() => setNewGameMode(GameMode.NUMBERS)}
-                  className={`flex-1 py-2 px-4 rounded font-bold ${newGameMode === GameMode.NUMBERS ? 'bg-squid-pink text-white' : 'bg-gray-800 text-gray-400'}`}
+                  className={`py-2 px-3 rounded font-bold text-sm ${newGameMode === GameMode.NUMBERS ? 'bg-squid-pink text-white' : 'bg-gray-800 text-gray-400'}`}
                 >
-                  ЦИФРЫ
+                  🔢 ЦИФРЫ
                 </button>
                 <button
                   onClick={() => setNewGameMode(GameMode.WORDS)}
-                  className={`flex-1 py-2 px-4 rounded font-bold ${newGameMode === GameMode.WORDS ? 'bg-squid-green text-black' : 'bg-gray-800 text-gray-400'}`}
+                  className={`py-2 px-3 rounded font-bold text-sm ${newGameMode === GameMode.WORDS ? 'bg-squid-green text-black' : 'bg-gray-800 text-gray-400'}`}
                 >
-                  СЛОВА
+                  📝 СЛОВА
+                </button>
+                <button
+                  onClick={() => setNewGameMode(GameMode.BATTLESHIP)}
+                  className={`py-2 px-3 rounded font-bold text-sm ${newGameMode === GameMode.BATTLESHIP ? 'bg-blue-600 text-white' : 'bg-gray-800 text-gray-400'}`}
+                >
+                  🚢 МОРСКОЙ БОЙ
                 </button>
               </div>
             </div>
@@ -850,7 +1108,10 @@ const App: React.FC = () => {
             </div>
 
             <button
-              onClick={handleCreateGame}
+              onClick={() => {
+                haptic.medium();
+                handleCreateGame();
+              }}
               className="w-full bg-squid-pink hover:bg-pink-700 text-white font-bold py-3 px-4 rounded tracking-wider"
             >
               СОЗДАТЬ
@@ -916,7 +1177,179 @@ const App: React.FC = () => {
     </div>
   );
 
+  const renderBattleshipGame = () => {
+    if (status === GameStatus.SETUP) {
+      // Режим размещения кораблей
+      return (
+        <div className="min-h-screen bg-squid-dark flex flex-col items-center justify-center p-4">
+          <div className="max-w-6xl w-full">
+            <div className="text-center mb-6">
+              <h2 className="text-2xl font-black text-squid-pink mb-2">МОРСКОЙ БОЙ</h2>
+              <p className="text-sm text-gray-400">{feedback}</p>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-[1fr_2fr] gap-6">
+              {/* Левая панель - размещение кораблей */}
+              <div className="bg-squid-panel border border-gray-800 rounded p-4">
+                <ShipPlacer
+                  ships={myShips}
+                  selectedShip={selectedShip}
+                  onSelectShip={setSelectedShip}
+                  orientation={shipOrientation}
+                  onToggleOrientation={() => setShipOrientation((o) => (o === 'horizontal' ? 'vertical' : 'horizontal'))}
+                  onRandomize={handleRandomizeShips}
+                  onClear={handleClearShips}
+                  onReady={handleBattleshipSetupSubmit}
+                  canSubmit={areAllShipsPlaced(myShips)}
+                />
+              </div>
+
+              {/* Правая панель - поле */}
+              <div className="flex items-center justify-center">
+                <div
+                  onMouseLeave={() => setHighlightCells([])}
+                >
+                  <BattleshipGrid
+                    mode="setup"
+                    ships={myShips}
+                    hits={[]}
+                    onCellClick={handleBattleshipCellClick}
+                    showShips={true}
+                    highlightCells={highlightCells}
+                    isValid={highlightValid}
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-6 text-center">
+              <button
+                onClick={handleBackToLobby}
+                className="text-sm text-red-500 hover:text-red-400 font-bold"
+              >
+                ← ВЕРНУТЬСЯ В ЛОББИ
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // Режим игры
+    return (
+      <div className="h-screen flex flex-col bg-squid-dark">
+        {/* Заголовок */}
+        <div className="sticky top-0 z-30 bg-squid-dark px-4 pt-3 pb-2 border-b border-gray-800">
+          {status === GameStatus.PLAYING && (
+            <div className="mb-2">
+              <Timer
+                duration={TURN_DURATION}
+                onTimeUp={handleTimeUp}
+                isActive={true}
+                resetKey={timerResetKey}
+              />
+            </div>
+          )}
+          <div className="flex justify-between items-center">
+            <div className="flex gap-2 items-center">
+              {getOpponentAvatar()}
+              <span className="text-sm text-gray-400">{getOpponentNickname()}</span>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="font-mono text-xs text-gray-400">
+                {currentGame?.prize && <span className="text-yellow-400 mr-2">💰 {currentGame.prize}</span>}
+                РАУНД {currentGame?.turn_count || 0}
+              </div>
+              <button onClick={handleBackToLobby} className="text-xs text-red-500 font-bold hover:underline uppercase">
+                Выход
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Информация */}
+        <div className="sticky top-[57px] z-20 bg-squid-dark px-4 pb-2">
+          <div className="bg-squid-panel border-l-4 border-squid-pink p-2 mb-2 font-mono text-sm text-center shadow-lg text-white">
+            {feedback}
+          </div>
+        </div>
+
+        {/* Игровые поля */}
+        <div className="flex-1 overflow-auto p-4">
+          <div className="max-w-4xl mx-auto space-y-6">
+            {/* Поле оппонента (для стрельбы) */}
+            <div className="bg-squid-panel border border-gray-800 rounded p-4">
+              <h3 className="text-sm font-bold text-squid-pink mb-3 text-center">
+                ПОЛЕ ПРОТИВНИКА
+              </h3>
+              <div className="flex justify-center">
+                <BattleshipGrid
+                  mode="playing"
+                  ships={opponentShips}
+                  hits={myHits}
+                  onCellClick={handleBattleshipCellClick}
+                  isMyTurn={currentGame?.current_turn === currentPlayer?.id}
+                  showShips={false}
+                />
+              </div>
+            </div>
+
+            {/* Моё поле */}
+            <div className="bg-squid-panel border border-gray-800 rounded p-4">
+              <h3 className="text-sm font-bold text-squid-green mb-3 text-center">
+                ВАШЕ ПОЛЕ
+              </h3>
+              <div className="flex justify-center">
+                <BattleshipGrid
+                  mode="playing"
+                  ships={myShips}
+                  hits={opponentHits}
+                  onCellClick={() => {}}
+                  isMyTurn={false}
+                  showShips={true}
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Game Over Modal */}
+        {status === GameStatus.GAME_OVER && currentGame && (
+          <Modal>
+            <div className="text-center space-y-6">
+              <h2 className={`text-3xl font-black ${currentGame.winner_id === currentPlayer?.id ? 'text-squid-green' : 'text-squid-pink'}`}>
+                {currentGame.winner_id === currentPlayer?.id ? 'ВЫ ПОБЕДИЛИ' : 'ВЫ ПРОИГРАЛИ'}
+              </h2>
+              <p className="font-mono text-sm text-gray-300">
+                {currentGame.winner_id === currentPlayer?.id
+                  ? 'ВЫ ПОТОПИЛИ ВСЕ КОРАБЛИ!'
+                  : 'ВСЕ ВАШИ КОРАБЛИ ПОТОПЛЕНЫ.'}
+              </p>
+              {currentGame.prize && currentGame.winner_id === currentPlayer?.id && (
+                <div className="p-4 bg-yellow-900/30 border border-yellow-600 rounded">
+                  <p className="text-yellow-400 font-bold text-lg">🏆 ВЫ ВЫИГРАЛИ</p>
+                  <p className="text-yellow-300 text-xl mt-2">{currentGame.prize}</p>
+                </div>
+              )}
+              <button
+                onClick={handleBackToLobby}
+                className="w-full py-3 bg-white text-black font-bold hover:bg-gray-200 transition-colors rounded"
+              >
+                ВЕРНУТЬСЯ В МЕНЮ
+              </button>
+            </div>
+          </Modal>
+        )}
+      </div>
+    );
+  };
+
   const renderGame = () => {
+    // Если это морской бой, используем отдельный рендер
+    if (gameMode === GameMode.BATTLESHIP) {
+      return renderBattleshipGame();
+    }
+
     // Helper function to render guess with colored squares
     const renderGuessSquares = (guess: Guess, targetSecret: string) => {
       const guessChars = guess.guess.split('');
@@ -1081,7 +1514,7 @@ const App: React.FC = () => {
           {/* Input Display */}
           {((status === GameStatus.PLAYING && currentGame?.current_turn === currentPlayer?.id) || status === GameStatus.SETUP) && (
             <div className="flex justify-center gap-2 mb-4">
-              {Array.from({ length: gameMode === GameMode.NUMBERS ? NUM_LENGTH : WORD_LENGTH }).map((_, i) => (
+              {Array.from({ length: gameMode === GameMode.NUMBERS ? NUM_LENGTH : (currentGame?.word_length || 5) }).map((_, i) => (
                 <div key={i} className="w-10 h-12 border-b-2 border-white flex items-center justify-center text-xl font-mono text-white">
                   {currentInput[i] || ''}
                 </div>
