@@ -4,11 +4,13 @@ import { generateAISecretNumber, generateAISecretWord } from './services/ai';
 import Timer from './components/Timer';
 import { Keyboard } from './components/Keyboard';
 import { StartScreen } from './components/StartScreen';
-import { CharacterSelection } from './components/CharacterSelection';
+import { GameSelection } from './components/GameSelection';
+import { ModernLobby } from './components/ModernLobby';
 import { BattleshipGrid } from './components/BattleshipGrid';
 import { ShipPlacer } from './components/ShipPlacer';
 import { CHARACTERS } from './data/characters';
 import { haptic } from './utils/haptic';
+import { telegramService } from './utils/telegram';
 import {
   PlayerService,
   GameService,
@@ -37,6 +39,11 @@ const NUM_LENGTH = 4;
 const WORD_LENGTH = 5;
 const TURN_DURATION = 120; // 120 seconds (2 minutes)
 
+// Development mode configuration
+const IS_DEV_MODE = import.meta.env.VITE_DEV_MODE === 'true';
+const DEV_AUTO_LOGIN = import.meta.env.VITE_DEV_AUTO_LOGIN === 'true';
+const DEV_USER_LOGIN = import.meta.env.VITE_DEV_USER_LOGIN || 'TestUser';
+
 // --- Helper Components ---
 
 const Modal = ({ children, onClose }: { children?: React.ReactNode, onClose?: () => void }) => (
@@ -60,7 +67,7 @@ const Modal = ({ children, onClose }: { children?: React.ReactNode, onClose?: ()
 const App: React.FC = () => {
   // Screen State
   const [currentScreen, setCurrentScreen] = useState<AppScreen>(AppScreen.START);
-  const [selectedCharacter, setSelectedCharacter] = useState<Character | null>(null);
+  const [showNicknameModal, setShowNicknameModal] = useState(false);
 
   // Player State
   const [currentPlayer, setCurrentPlayer] = useState<Player | null>(null);
@@ -144,10 +151,21 @@ const App: React.FC = () => {
         } else {
           // Player not found, clear localStorage
           localStorage.removeItem('squid_player_id');
-          setCurrentScreen(AppScreen.START);
+
+          // Auto-login in dev mode
+          if (IS_DEV_MODE && DEV_AUTO_LOGIN) {
+            await handleDevAutoLogin();
+          } else {
+            setCurrentScreen(AppScreen.START);
+          }
         }
       } else {
-        setCurrentScreen(AppScreen.START);
+        // Auto-login in dev mode if no saved session
+        if (IS_DEV_MODE && DEV_AUTO_LOGIN) {
+          await handleDevAutoLogin();
+        } else {
+          setCurrentScreen(AppScreen.START);
+        }
       }
 
       setIsLoadingSession(false);
@@ -363,6 +381,44 @@ const App: React.FC = () => {
 
   // --- Handlers ---
 
+  // Автоматический вход в режиме разработки
+  const handleDevAutoLogin = async () => {
+    console.log('[DEV MODE] Auto-login as:', DEV_USER_LOGIN);
+
+    // Генерируем случайную аватарку
+    const avatars: Array<'○' | '△' | '□'> = ['○', '△', '□'];
+    const randomAvatar = avatars[Math.floor(Math.random() * avatars.length)];
+
+    // Пытаемся найти существующего тестового пользователя
+    const { data: existingPlayers } = await supabase
+      .from('players')
+      .select('*')
+      .eq('login', DEV_USER_LOGIN)
+      .limit(1);
+
+    let player: Player | null = null;
+
+    if (existingPlayers && existingPlayers.length > 0) {
+      // Используем существующего пользователя
+      player = existingPlayers[0];
+      console.log('[DEV MODE] Using existing dev user:', player.id);
+      await PlayerService.updateOnlineStatus(player.id, true);
+    } else {
+      // Создаем нового тестового пользователя
+      player = await PlayerService.createPlayer(DEV_USER_LOGIN, randomAvatar);
+      console.log('[DEV MODE] Created new dev user:', player?.id);
+    }
+
+    if (player) {
+      setCurrentPlayer(player);
+      setCurrentScreen(AppScreen.GAME);
+      stopHeartbeatRef.current = startHeartbeat(player.id);
+    } else {
+      console.error('[DEV MODE] Failed to create/find dev user');
+      setCurrentScreen(AppScreen.START);
+    }
+  };
+
   const handleLoginSubmit = async () => {
     const trimmedLogin = loginInput.trim();
 
@@ -394,11 +450,34 @@ const App: React.FC = () => {
     if (player) {
       setCurrentPlayer(player);
       setCurrentScreen(AppScreen.GAME);
+      setShowLoginModal(false);
 
       // Start heartbeat to keep player online
       stopHeartbeatRef.current = startHeartbeat(player.id);
     } else {
       setLoginError('Ошибка создания профиля. Попробуйте снова.');
+    }
+  };
+
+  // Автоматическая регистрация через Telegram
+  const handleTelegramLogin = async () => {
+    const displayName = telegramService.getUserDisplayName();
+
+    // Генерируем случайную аватарку из доступных
+    const avatars: Array<'○' | '△' | '□'> = ['○', '△', '□'];
+    const randomAvatar = avatars[Math.floor(Math.random() * avatars.length)];
+
+    // Создать игрока с данными из Telegram
+    const player = await PlayerService.createPlayer(displayName, randomAvatar);
+    if (player) {
+      setCurrentPlayer(player);
+      setCurrentScreen(AppScreen.GAME);
+
+      // Start heartbeat to keep player online
+      stopHeartbeatRef.current = startHeartbeat(player.id);
+    } else {
+      // Если не удалось создать, показываем модальное окно для ручного ввода
+      setShowLoginModal(true);
     }
   };
 
@@ -780,16 +859,22 @@ const App: React.FC = () => {
     setCurrentScreen(AppScreen.START);
     setStatus(GameStatus.LOBBY);
     setCurrentGame(null);
-    setSelectedCharacter(null);
   };
 
-  const handleStartGame = () => {
-    setCurrentScreen(AppScreen.CHARACTER_SELECT);
+  const handleStartGame = async () => {
+    // Попытка автоматической регистрации через Telegram
+    if (telegramService.isAvailable()) {
+      await handleTelegramLogin();
+    } else {
+      // Если Telegram недоступен, показываем модальное окно для ручного ввода
+      setShowLoginModal(true);
+      setCurrentScreen(AppScreen.LOGIN);
+    }
   };
 
-  const handleCharacterSelect = (character: Character) => {
-    setSelectedCharacter(character);
-    setCurrentScreen(AppScreen.LOGIN);
+  const handleSelectGameMode = (mode: GameMode) => {
+    setNewGameMode(mode);
+    setShowCreateGameModal(true);
   };
 
   const handleSendInvitation = async (toPlayerId: string) => {
@@ -816,7 +901,7 @@ const App: React.FC = () => {
     return CHARACTERS.find(c => c.id === characterId) || null;
   };
 
-  const getPlayerAvatar = (player: Player): JSX.Element => {
+  const getPlayerAvatar = (player: Player): React.JSX.Element => {
     const character = getCharacterById(player.avatar);
     if (character?.avatarPath) {
       return (
@@ -844,7 +929,7 @@ const App: React.FC = () => {
     return opponent?.login || opponent?.nickname || '???';
   };
 
-  const getOpponentAvatar = (): JSX.Element => {
+  const getOpponentAvatar = (): React.JSX.Element => {
     if (!currentGame) return <span>?</span>;
     const opponentId = isCreator ? currentGame.opponent_id : currentGame.creator_id;
     const opponent = onlinePlayers.find(p => p.id === opponentId);
@@ -903,7 +988,39 @@ const App: React.FC = () => {
     );
   };
 
-  const renderLobby = () => (
+  const renderLobby = () => {
+    if (!currentPlayer) return null;
+
+    return (
+      <ModernLobby
+        currentPlayer={currentPlayer}
+        onlinePlayers={onlinePlayers}
+        onlineCount={onlineCount}
+        waitingGames={waitingGames}
+        onCreateGame={() => {
+          haptic.medium();
+          setShowCreateGameModal(true);
+        }}
+        onJoinGame={(game) => {
+          haptic.medium();
+          handleJoinGame(game);
+        }}
+        onInvitePlayers={(game) => {
+          setCurrentGame(game);
+          setShowInviteModal(true);
+        }}
+        onLogout={handleLogout}
+        onBack={() => {
+          setCurrentGame(null);
+          // Вернуться к выбору игры
+        }}
+        getPlayerAvatar={getPlayerAvatar}
+        selectedMode={newGameMode}
+      />
+    );
+  };
+
+  const renderOldLobbyContent = () => (
     <div className="flex flex-col h-screen p-4 animate-fadeIn bg-squid-dark">
       <div className="text-center space-y-2 mb-4">
         <h1 className="text-3xl font-black tracking-widest text-white">
@@ -919,116 +1036,6 @@ const App: React.FC = () => {
           ОНЛАЙН: {onlineCount} игроков
         </div>
       </div>
-
-      {/* Create Game Button */}
-      <button
-        onClick={() => {
-          haptic.medium();
-          setShowCreateGameModal(true);
-        }}
-        className="w-full bg-squid-pink hover:bg-pink-700 text-white font-bold py-3 px-4 rounded mb-4 tracking-wider"
-      >
-        + СОЗДАТЬ СВОЮ ИГРУ
-      </button>
-
-      {/* Waiting Games */}
-      <div className="overflow-y-auto bg-gray-900/50 border border-gray-800 rounded p-3 mb-4" style={{ minHeight: '400px', maxHeight: '60vh' }}>
-        <h2 className="text-xs font-mono text-gray-500 mb-3 border-b border-gray-700 pb-2">
-          АКТИВНЫЕ ИГРЫ ({waitingGames.length})
-        </h2>
-        <div className="space-y-3">
-          {waitingGames.length === 0 ? (
-            <div className="text-center text-gray-600 py-8 text-sm">
-              НЕТ АКТИВНЫХ ИГР<br/>
-              <span className="text-xs">СОЗДАЙ ПЕРВУЮ!</span>
-            </div>
-          ) : (
-            waitingGames.map((game) => {
-              const creator = onlinePlayers.find(p => p.id === game.creator_id);
-              const isMyGame = game.creator_id === currentPlayer?.id;
-
-              return (
-                <div key={game.id} className={`bg-squid-panel border p-3 rounded ${isMyGame ? 'border-squid-green' : 'border-gray-700'}`}>
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-3">
-                      <div className="flex items-center justify-center w-10 h-10">
-                        {creator ? getPlayerAvatar(creator) : <span>?</span>}
-                      </div>
-                      <div>
-                        <div className="text-white text-sm font-bold">
-                          {game.game_name || `Игра от ${creator?.login || creator?.nickname || 'Игрока'}`}
-                          {isMyGame && <span className="text-squid-green text-xs ml-2">(ваша)</span>}
-                        </div>
-                        <div className="text-[10px] text-gray-400">
-                          {game.game_mode === 'NUMBERS' ? '🔢 ЦИФРЫ' : game.game_mode === 'BATTLESHIP' ? '🚢 МОРСКОЙ БОЙ' : '📝 СЛОВА'} • от {creator?.login || creator?.nickname}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                  {game.prize && (
-                    <div className="bg-yellow-900/30 border border-yellow-600/50 rounded px-2 py-1 mb-2">
-                      <div className="text-[9px] text-yellow-600 font-bold">🏆 ПРИЗ:</div>
-                      <div className="text-xs text-yellow-400">{game.prize}</div>
-                    </div>
-                  )}
-                  {!isMyGame ? (
-                    <button
-                      onClick={() => {
-                        haptic.medium();
-                        handleJoinGame(game);
-                      }}
-                      className="w-full bg-squid-green hover:bg-green-700 text-black text-sm px-3 py-2 rounded font-bold tracking-wider"
-                    >
-                      ВСТУПИТЬ В ИГРУ
-                    </button>
-                  ) : (
-                    <div className="space-y-2">
-                      <div className="text-center text-xs text-gray-500 py-1">
-                        Ожидание оппонента...
-                      </div>
-                      <button
-                        onClick={() => {
-                          setCurrentGame(game);
-                          setShowInviteModal(true);
-                        }}
-                        className="w-full bg-blue-600 hover:bg-blue-700 text-white text-xs px-3 py-2 rounded font-bold"
-                      >
-                        📨 ПРИГЛАСИТЬ УЧАСТНИКОВ
-                      </button>
-                    </div>
-                  )}
-                </div>
-              );
-            })
-          )}
-        </div>
-      </div>
-
-      {/* Online Players - показываем рядом */}
-      <div className="bg-gray-900/30 border border-gray-800 rounded p-3 mb-4">
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-xs font-mono text-gray-500">ОНЛАЙН ИГРОКИ</h3>
-          <button
-            onClick={handleLogout}
-            className="text-xs text-red-400 hover:text-red-300 font-mono"
-          >
-            ВЫЙТИ
-          </button>
-        </div>
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-          {onlinePlayers.slice(0, 12).map((player) => (
-            <div key={player.id} className="text-xs bg-gray-800/50 rounded px-2 py-1 flex items-center gap-2">
-              {getPlayerAvatar(player)}
-              <span className="text-gray-400 truncate">{player.login || player.nickname}</span>
-            </div>
-          ))}
-        </div>
-        {onlinePlayers.length > 12 && (
-          <div className="text-xs text-gray-600 text-center mt-2">
-            +{onlinePlayers.length - 12} еще
-          </div>
-        )}
-        </div>
 
       <div className="text-center text-gray-600 text-[10px] font-mono mt-2">
         СЕРВЕР: ХАКАСИЯ-1 • ПОДКЛЮЧЕНИЕ СТАБИЛЬНО
@@ -1587,43 +1594,24 @@ const App: React.FC = () => {
     return <StartScreen onStart={handleStartGame} />;
   }
 
-  // Character Selection Screen
-  if (currentScreen === AppScreen.CHARACTER_SELECT) {
-    return <CharacterSelection characters={CHARACTERS} onSelect={handleCharacterSelect} />;
-  }
-
-  // Login Screen
-  if (currentScreen === AppScreen.LOGIN) {
+  // Login Screen (Manual Login Modal)
+  if (currentScreen === AppScreen.LOGIN || showLoginModal) {
     return (
       <div className="min-h-screen bg-squid-dark flex items-center justify-center p-4">
-        <Modal onClose={() => setCurrentScreen(AppScreen.CHARACTER_SELECT)}>
+        <Modal onClose={() => {
+          setShowLoginModal(false);
+          if (currentPlayer) {
+            setCurrentScreen(AppScreen.GAME);
+          } else {
+            setCurrentScreen(AppScreen.START);
+          }
+        }}>
           <h1 className="text-3xl font-black text-center mb-2">
-            ИГРА В<br/><span className="text-squid-pink">КАЛЬМАРА</span>
+            ИГРА В<br/><span className="bg-gradient-to-r from-squid-accent to-squid-yellow bg-clip-text text-transparent">КАЛЬМАРА</span>
           </h1>
           <p className="text-gray-400 text-sm text-center mb-6">
-            Введите ваш логин для {selectedCharacter?.name}
+            Создайте свой профиль
           </p>
-
-          {/* Character Preview */}
-          {selectedCharacter && (
-            <div className="flex items-center gap-4 mb-6 p-4 bg-gray-800/50 rounded border border-squid-pink/30">
-              <div className="w-16 h-16 rounded-full bg-gradient-to-b from-teal-500/30 to-green-500/30 flex items-center justify-center">
-                <img
-                  src={selectedCharacter.avatarPath || selectedCharacter.imagePath}
-                  alt={selectedCharacter.name}
-                  className="w-12 h-12 rounded-full object-cover"
-                  onError={(e) => {
-                    const target = e.target as HTMLImageElement;
-                    target.style.display = 'none';
-                  }}
-                />
-              </div>
-              <div>
-                <p className="text-squid-green font-bold">{selectedCharacter.name}</p>
-                <p className="text-xs text-gray-400">Выбранный персонаж</p>
-              </div>
-            </div>
-          )}
 
           <div className="space-y-4">
             {/* Login Input */}
@@ -1645,7 +1633,7 @@ const App: React.FC = () => {
                 }}
                 placeholder="Введите логин"
                 maxLength={20}
-                className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white text-sm focus:outline-none focus:border-squid-pink"
+                className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white text-sm focus:outline-none focus:border-squid-accent"
                 autoFocus
               />
               {loginError && (
@@ -1656,17 +1644,50 @@ const App: React.FC = () => {
               </p>
             </div>
 
+            {/* Avatar Selection */}
+            <div>
+              <label className="text-xs text-gray-400 uppercase block mb-2">
+                Выберите аватар:
+              </label>
+              <div className="flex gap-3 justify-center">
+                {(['○', '△', '□'] as const).map((avatar) => (
+                  <button
+                    key={avatar}
+                    onClick={() => setSelectedAvatar(avatar)}
+                    className={`w-16 h-16 rounded-full flex items-center justify-center text-3xl transition-all ${
+                      selectedAvatar === avatar
+                        ? 'bg-squid-accent text-squid-dark border-2 border-squid-accent scale-110'
+                        : 'bg-gray-800 text-gray-400 border-2 border-gray-700 hover:border-gray-500'
+                    }`}
+                  >
+                    {avatar}
+                  </button>
+                ))}
+              </div>
+            </div>
+
             {/* Submit Button */}
             <button
               onClick={handleLoginSubmit}
               disabled={loginInput.trim().length < 3}
-              className="w-full bg-squid-pink hover:bg-pink-700 disabled:bg-gray-700 disabled:cursor-not-allowed text-white font-bold py-3 px-4 rounded tracking-wider transition-colors"
+              className="w-full bg-gradient-to-r from-squid-accent to-squid-yellow hover:from-squid-yellow hover:to-squid-accent disabled:from-gray-700 disabled:to-gray-700 disabled:cursor-not-allowed text-squid-dark font-bold py-3 px-4 rounded tracking-wider transition-all transform hover:scale-105"
             >
               ВОЙТИ В ИГРУ
             </button>
           </div>
         </Modal>
       </div>
+    );
+  }
+
+  // Game Selection Screen (показывается после входа, но до создания/присоединения к игре)
+  if (currentScreen === AppScreen.GAME && currentPlayer && status === GameStatus.LOBBY && !currentGame && !showCreateGameModal) {
+    return (
+      <GameSelection
+        onSelectGame={handleSelectGameMode}
+        playerName={currentPlayer.login || currentPlayer.nickname || 'Игрок'}
+        playerAvatar={telegramService.getUserAvatar()}
+      />
     );
   }
 

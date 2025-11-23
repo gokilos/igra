@@ -1,21 +1,6 @@
 // Утилита для работы с виброоткликом в Telegram WebApp
 // Документация: https://core.telegram.org/bots/webapps#hapticfeedback
 
-declare global {
-  interface Window {
-    Telegram?: {
-      WebApp?: {
-        HapticFeedback?: {
-          impactOccurred: (style: 'light' | 'medium' | 'heavy' | 'rigid' | 'soft') => void;
-          notificationOccurred: (type: 'error' | 'success' | 'warning') => void;
-          selectionChanged: () => void;
-        };
-        ready?: () => void;
-      };
-    };
-  }
-}
-
 // Проверяем доступность Telegram WebApp
 const isTelegramAvailable = () => {
   return typeof window !== 'undefined' &&
