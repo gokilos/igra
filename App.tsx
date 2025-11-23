@@ -1187,87 +1187,161 @@ const App: React.FC = () => {
 
         {/* Create Game Modal */}
         {showCreateGameModal && (
-          <Modal onClose={() => setShowCreateGameModal(false)}>
-            <h2 className="text-2xl font-black text-squid-pink mb-4">СОЗДАТЬ ИГРУ</h2>
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-md p-4 animate-fadeIn">
+            <div className="relative w-full max-w-lg">
+              {/* Animated background blobs */}
+              <div className="absolute -inset-1 bg-gradient-to-r from-purple-600 via-pink-600 to-blue-600 rounded-3xl blur-xl opacity-50 animate-pulse"></div>
 
-            <div className="space-y-4 text-left">
-              <div>
-                <label className="text-xs text-gray-400 uppercase block mb-2">Название игры:</label>
-                <input
-                  type="text"
-                  value={newGameName}
-                  onChange={(e) => setNewGameName(e.target.value)}
-                  placeholder="Например: Игра за обед"
-                  maxLength={50}
-                  className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white text-sm focus:outline-none focus:border-squid-pink"
-                />
-              </div>
+              {/* Main modal content */}
+              <div className="relative bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 rounded-3xl shadow-2xl overflow-hidden">
+                {/* Close button */}
+                <button
+                  onClick={() => setShowCreateGameModal(false)}
+                  className="absolute top-4 right-4 z-10 w-10 h-10 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 backdrop-blur-sm transition-all group"
+                >
+                  <span className="text-white text-2xl group-hover:rotate-90 transition-transform duration-300">×</span>
+                </button>
 
-              <div>
-                <label className="text-xs text-gray-400 uppercase block mb-2">Режим игры:</label>
-                <div className="grid grid-cols-3 gap-2">
-                  <button
-                    onClick={() => setNewGameMode(GameMode.NUMBERS)}
-                    className={`py-2 px-3 rounded font-bold text-sm ${newGameMode === GameMode.NUMBERS ? 'bg-squid-pink text-white' : 'bg-gray-800 text-gray-400'}`}
-                  >
-                    🔢 ЦИФРЫ
-                  </button>
-                  <button
-                    onClick={() => setNewGameMode(GameMode.WORDS)}
-                    className={`py-2 px-3 rounded font-bold text-sm ${newGameMode === GameMode.WORDS ? 'bg-squid-green text-black' : 'bg-gray-800 text-gray-400'}`}
-                  >
-                    📝 СЛОВА
-                  </button>
-                  <button
-                    onClick={() => setNewGameMode(GameMode.BATTLESHIP)}
-                    className={`py-2 px-3 rounded font-bold text-sm ${newGameMode === GameMode.BATTLESHIP ? 'bg-blue-600 text-white' : 'bg-gray-800 text-gray-400'}`}
-                  >
-                    🚢 МОРСКОЙ БОЙ
-                  </button>
+                {/* Header */}
+                <div className="relative p-8 pb-6">
+                  <div className="absolute top-0 left-0 w-full h-32 bg-gradient-to-b from-pink-500/20 to-transparent"></div>
+                  <h2 className="relative text-3xl font-display font-black text-white mb-2">
+                    Создать игру
+                  </h2>
+                  <p className="relative text-sm text-gray-400 font-heading">
+                    Настройте параметры вашей игры
+                  </p>
                 </div>
-              </div>
 
-              {/* Длина слова - только для режима СЛОВА */}
-              {newGameMode === GameMode.WORDS && (
-                <div>
-                  <label className="text-xs text-gray-400 uppercase block mb-2">Длина слова:</label>
-                  <div className="flex gap-2">
-                    {[5, 6, 10].map(length => (
-                      <button
-                        key={length}
-                        onClick={() => setNewWordLength(length)}
-                        className={`flex-1 py-2 px-4 rounded font-bold ${newWordLength === length ? 'bg-squid-green text-black' : 'bg-gray-800 text-gray-400'}`}
-                      >
-                        {length} букв
-                      </button>
-                    ))}
+                {/* Content */}
+                <div className="px-8 pb-8 space-y-6">
+                  {/* Game Name */}
+                  <div className="space-y-2">
+                    <label className="text-xs font-heading font-semibold text-gray-400 uppercase tracking-wider block">
+                      Название игры
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        value={newGameName}
+                        onChange={(e) => setNewGameName(e.target.value)}
+                        placeholder="Например: Игра за обед"
+                        maxLength={50}
+                        className="w-full bg-white/5 border-2 border-white/10 rounded-2xl px-4 py-3.5 text-white placeholder-gray-500 focus:outline-none focus:border-pink-500 focus:bg-white/10 transition-all font-heading"
+                      />
+                    </div>
                   </div>
+
+                  {/* Game Mode */}
+                  <div className="space-y-3">
+                    <label className="text-xs font-heading font-semibold text-gray-400 uppercase tracking-wider block">
+                      Режим игры
+                    </label>
+                    <div className="grid grid-cols-3 gap-3">
+                      <button
+                        onClick={() => {
+                          setNewGameMode(GameMode.NUMBERS);
+                          haptic.selection();
+                        }}
+                        className={`group relative overflow-hidden rounded-2xl p-4 font-heading font-bold text-sm transition-all transform hover:scale-105 ${
+                          newGameMode === GameMode.NUMBERS
+                            ? 'bg-gradient-to-br from-purple-600 to-purple-700 text-white shadow-lg shadow-purple-500/50'
+                            : 'bg-white/5 text-gray-400 hover:bg-white/10'
+                        }`}
+                      >
+                        <div className="text-2xl mb-1">🔢</div>
+                        <div className="text-xs">Цифры</div>
+                      </button>
+                      <button
+                        onClick={() => {
+                          setNewGameMode(GameMode.WORDS);
+                          haptic.selection();
+                        }}
+                        className={`group relative overflow-hidden rounded-2xl p-4 font-heading font-bold text-sm transition-all transform hover:scale-105 ${
+                          newGameMode === GameMode.WORDS
+                            ? 'bg-gradient-to-br from-pink-600 to-pink-700 text-white shadow-lg shadow-pink-500/50'
+                            : 'bg-white/5 text-gray-400 hover:bg-white/10'
+                        }`}
+                      >
+                        <div className="text-2xl mb-1">📝</div>
+                        <div className="text-xs">Слова</div>
+                      </button>
+                      <button
+                        onClick={() => {
+                          setNewGameMode(GameMode.BATTLESHIP);
+                          haptic.selection();
+                        }}
+                        className={`group relative overflow-hidden rounded-2xl p-4 font-heading font-bold text-sm transition-all transform hover:scale-105 ${
+                          newGameMode === GameMode.BATTLESHIP
+                            ? 'bg-gradient-to-br from-blue-600 to-cyan-600 text-white shadow-lg shadow-blue-500/50'
+                            : 'bg-white/5 text-gray-400 hover:bg-white/10'
+                        }`}
+                      >
+                        <div className="text-2xl mb-1">🚢</div>
+                        <div className="text-xs">Морской бой</div>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Word Length - только для режима СЛОВА */}
+                  {newGameMode === GameMode.WORDS && (
+                    <div className="space-y-3 animate-fadeIn">
+                      <label className="text-xs font-heading font-semibold text-gray-400 uppercase tracking-wider block">
+                        Длина слова
+                      </label>
+                      <div className="flex gap-3">
+                        {[5, 6, 10].map(length => (
+                          <button
+                            key={length}
+                            onClick={() => {
+                              setNewWordLength(length);
+                              haptic.selection();
+                            }}
+                            className={`flex-1 py-3 px-4 rounded-xl font-heading font-bold text-sm transition-all transform hover:scale-105 ${
+                              newWordLength === length
+                                ? 'bg-gradient-to-r from-pink-600 to-purple-600 text-white shadow-lg'
+                                : 'bg-white/5 text-gray-400 hover:bg-white/10'
+                            }`}
+                          >
+                            {length} букв
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Prize */}
+                  <div className="space-y-2">
+                    <label className="text-xs font-heading font-semibold text-gray-400 uppercase tracking-wider block">
+                      Приз <span className="text-gray-600">(опционально)</span>
+                    </label>
+                    <div className="relative">
+                      <div className="absolute left-4 top-1/2 transform -translate-y-1/2 text-xl">🏆</div>
+                      <input
+                        type="text"
+                        value={newGamePrize}
+                        onChange={(e) => setNewGamePrize(e.target.value)}
+                        placeholder="1000₽ или Кофе"
+                        maxLength={50}
+                        className="w-full bg-white/5 border-2 border-white/10 rounded-2xl pl-12 pr-4 py-3.5 text-white placeholder-gray-500 focus:outline-none focus:border-yellow-500 focus:bg-white/10 transition-all font-heading"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Create Button */}
+                  <button
+                    onClick={() => {
+                      haptic.medium();
+                      handleCreateGame();
+                    }}
+                    className="w-full bg-gradient-to-r from-pink-600 via-purple-600 to-blue-600 hover:from-pink-500 hover:via-purple-500 hover:to-blue-500 text-white font-display font-black py-4 px-6 rounded-2xl text-lg shadow-lg shadow-pink-500/50 transition-all transform hover:scale-[1.02] active:scale-[0.98] mt-2"
+                  >
+                    ✨ Создать игру
+                  </button>
                 </div>
-              )}
-
-              <div>
-                <label className="text-xs text-gray-400 uppercase block mb-2">Приз (опционально):</label>
-                <input
-                  type="text"
-                  value={newGamePrize}
-                  onChange={(e) => setNewGamePrize(e.target.value)}
-                  placeholder="Например: 1000₽ или Кофе"
-                  maxLength={50}
-                  className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white text-sm focus:outline-none focus:border-squid-pink"
-                />
               </div>
-
-              <button
-                onClick={() => {
-                  haptic.medium();
-                  handleCreateGame();
-                }}
-                className="w-full bg-squid-pink hover:bg-pink-700 text-white font-bold py-3 px-4 rounded tracking-wider"
-              >
-                СОЗДАТЬ
-              </button>
             </div>
-          </Modal>
+          </div>
         )}
 
         {/* Invite Players Modal */}
