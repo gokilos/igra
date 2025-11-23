@@ -39,6 +39,11 @@ const NUM_LENGTH = 4;
 const WORD_LENGTH = 5;
 const TURN_DURATION = 120; // 120 seconds (2 minutes)
 
+// Development mode configuration
+const IS_DEV_MODE = import.meta.env.VITE_DEV_MODE === 'true';
+const DEV_AUTO_LOGIN = import.meta.env.VITE_DEV_AUTO_LOGIN === 'true';
+const DEV_USER_LOGIN = import.meta.env.VITE_DEV_USER_LOGIN || 'TestUser';
+
 // --- Helper Components ---
 
 const Modal = ({ children, onClose }: { children?: React.ReactNode, onClose?: () => void }) => (
@@ -146,10 +151,21 @@ const App: React.FC = () => {
         } else {
           // Player not found, clear localStorage
           localStorage.removeItem('squid_player_id');
-          setCurrentScreen(AppScreen.START);
+
+          // Auto-login in dev mode
+          if (IS_DEV_MODE && DEV_AUTO_LOGIN) {
+            await handleDevAutoLogin();
+          } else {
+            setCurrentScreen(AppScreen.START);
+          }
         }
       } else {
-        setCurrentScreen(AppScreen.START);
+        // Auto-login in dev mode if no saved session
+        if (IS_DEV_MODE && DEV_AUTO_LOGIN) {
+          await handleDevAutoLogin();
+        } else {
+          setCurrentScreen(AppScreen.START);
+        }
       }
 
       setIsLoadingSession(false);
@@ -364,6 +380,44 @@ const App: React.FC = () => {
   }, [guesses, currentGame?.current_turn]);
 
   // --- Handlers ---
+
+  // Автоматический вход в режиме разработки
+  const handleDevAutoLogin = async () => {
+    console.log('[DEV MODE] Auto-login as:', DEV_USER_LOGIN);
+
+    // Генерируем случайную аватарку
+    const avatars: Array<'○' | '△' | '□'> = ['○', '△', '□'];
+    const randomAvatar = avatars[Math.floor(Math.random() * avatars.length)];
+
+    // Пытаемся найти существующего тестового пользователя
+    const { data: existingPlayers } = await supabase
+      .from('players')
+      .select('*')
+      .eq('login', DEV_USER_LOGIN)
+      .limit(1);
+
+    let player: Player | null = null;
+
+    if (existingPlayers && existingPlayers.length > 0) {
+      // Используем существующего пользователя
+      player = existingPlayers[0];
+      console.log('[DEV MODE] Using existing dev user:', player.id);
+      await PlayerService.updateOnlineStatus(player.id, true);
+    } else {
+      // Создаем нового тестового пользователя
+      player = await PlayerService.createPlayer(DEV_USER_LOGIN, randomAvatar);
+      console.log('[DEV MODE] Created new dev user:', player?.id);
+    }
+
+    if (player) {
+      setCurrentPlayer(player);
+      setCurrentScreen(AppScreen.GAME);
+      stopHeartbeatRef.current = startHeartbeat(player.id);
+    } else {
+      console.error('[DEV MODE] Failed to create/find dev user');
+      setCurrentScreen(AppScreen.START);
+    }
+  };
 
   const handleLoginSubmit = async () => {
     const trimmedLogin = loginInput.trim();

@@ -4,6 +4,9 @@ interface StartScreenProps {
   onStart: () => void;
 }
 
+// Check if dev mode is enabled
+const IS_DEV_MODE = import.meta.env.VITE_DEV_MODE === 'true';
+
 export const StartScreen: React.FC<StartScreenProps> = ({ onStart }) => {
   return (
     <div className="min-h-screen w-full flex flex-col items-center justify-center relative overflow-hidden bg-gradient-to-b from-gray-900 via-squid-dark to-black">
@@ -46,6 +49,13 @@ export const StartScreen: React.FC<StartScreenProps> = ({ onStart }) => {
         </button>
 
         <div className="text-center space-y-2 animate-fadeIn">
+          {IS_DEV_MODE && (
+            <div className="bg-yellow-500/20 border border-yellow-500 rounded px-3 py-1 mb-2">
+              <p className="text-yellow-400 text-xs font-mono font-bold">
+                🔧 РЕЖИМ РАЗРАБОТКИ
+              </p>
+            </div>
+          )}
           <p className="text-gray-600 text-xs font-mono">
             SQUID GAME • SURVIVAL CHALLENGE
           </p>
