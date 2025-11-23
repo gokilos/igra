@@ -257,6 +257,11 @@ const App: React.FC = () => {
             haptic.medium();
           }
 
+          // Виброотклик успеха когда оппонент завершил свой ход
+          if (!isMyTurn && wasMyTurn) {
+            haptic.success();
+          }
+
           setFeedback(isMyTurn ? 'ТВОЙ ХОД' : 'ХОД ОППОНЕНТА');
           setTimerResetKey(k => k + 1);
         }
@@ -264,6 +269,13 @@ const App: React.FC = () => {
         // Check for winner
         if (game.status === 'FINISHED') {
           setStatus(GameStatus.GAME_OVER);
+
+          // Виброотклик при окончании игры (успех если победил, ошибка если проиграл)
+          if (game.winner_id === currentPlayer?.id) {
+            haptic.success();
+          } else {
+            haptic.error();
+          }
         }
 
         // Update data for Battleship mode
@@ -427,6 +439,9 @@ const App: React.FC = () => {
       setShowCreateGameModal(false);
       setNewGamePrize('');
       setNewGameName('');
+
+      // Виброотклик успеха при создании игры
+      haptic.success();
     }
   };
 
@@ -456,6 +471,9 @@ const App: React.FC = () => {
         setMyRevealedIndices(Array(len).fill(false));
         setOpponentRevealedIndices(Array(len).fill(false));
       }
+
+      // Виброотклик успеха при присоединении к игре
+      haptic.success();
     }
   };
 
@@ -469,6 +487,9 @@ const App: React.FC = () => {
     try {
       setMySecret(currentInput);
       await GameService.setPlayerSecret(currentGame.id, currentPlayer.id, currentInput, isCreator);
+
+      // Виброотклик успеха при установке секрета
+      haptic.success();
 
       setFeedback('ОЖИДАНИЕ ОППОНЕНТА...');
       setCurrentInput('');
@@ -492,6 +513,9 @@ const App: React.FC = () => {
     if (currentGame.current_turn !== currentPlayer.id) return;
 
     console.log('Submitting guess:', currentInput);
+
+    // Легкая вибрация при отправке попытки
+    haptic.light();
 
     setIsSubmitting(true);
     try {
@@ -532,6 +556,11 @@ const App: React.FC = () => {
       const guessResult = await GuessService.addGuess(currentGame.id, currentPlayer.id, guess, resultText, matchCount);
       console.log('Guess added to DB:', guessResult);
 
+      // Виброотклик в зависимости от результата
+      if (isWin || matchCount > 0) {
+        haptic.success();
+      }
+
       if (isWin) {
         console.log('Game won! Finishing game...');
         await GameService.finishGame(currentGame.id, currentPlayer.id);
@@ -553,11 +582,15 @@ const App: React.FC = () => {
   const handleInput = (char: string) => {
     const maxLen = gameMode === GameMode.NUMBERS ? NUM_LENGTH : (currentGame?.word_length || 5);
     if (currentInput.length < maxLen) {
+      haptic.selection();
       setCurrentInput(prev => prev + char);
     }
   };
 
   const handleDelete = () => {
+    if (currentInput.length > 0) {
+      haptic.selection();
+    }
     setCurrentInput(prev => prev.slice(0, -1));
   };
 
@@ -664,6 +697,10 @@ const App: React.FC = () => {
     setIsSubmitting(true);
     try {
       await GameService.setPlayerShips(currentGame.id, currentPlayer.id, myShips, isCreator);
+
+      // Виброотклик успеха при расстановке кораблей
+      haptic.success();
+
       setFeedback('ОЖИДАНИЕ ОППОНЕНТА...');
 
       // Проверка готовности обоих игроков
@@ -885,7 +922,10 @@ const App: React.FC = () => {
 
       {/* Create Game Button */}
       <button
-        onClick={() => setShowCreateGameModal(true)}
+        onClick={() => {
+          haptic.medium();
+          setShowCreateGameModal(true);
+        }}
         className="w-full bg-squid-pink hover:bg-pink-700 text-white font-bold py-3 px-4 rounded mb-4 tracking-wider"
       >
         + СОЗДАТЬ СВОЮ ИГРУ
@@ -933,7 +973,10 @@ const App: React.FC = () => {
                   )}
                   {!isMyGame ? (
                     <button
-                      onClick={() => handleJoinGame(game)}
+                      onClick={() => {
+                        haptic.medium();
+                        handleJoinGame(game);
+                      }}
                       className="w-full bg-squid-green hover:bg-green-700 text-black text-sm px-3 py-2 rounded font-bold tracking-wider"
                     >
                       ВСТУПИТЬ В ИГРУ
@@ -1065,7 +1108,10 @@ const App: React.FC = () => {
             </div>
 
             <button
-              onClick={handleCreateGame}
+              onClick={() => {
+                haptic.medium();
+                handleCreateGame();
+              }}
               className="w-full bg-squid-pink hover:bg-pink-700 text-white font-bold py-3 px-4 rounded tracking-wider"
             >
               СОЗДАТЬ
