@@ -31,16 +31,18 @@ const Timer: React.FC<TimerProps> = ({ duration, onTimeUp, isActive, resetKey })
     return () => clearInterval(interval);
   }, [isActive, timeLeft, onTimeUp]);
 
-  const progress = (timeLeft / duration) * 100;
+  const minutes = Math.floor(timeLeft / 60);
+  const seconds = timeLeft % 60;
   const isCritical = timeLeft <= 10;
 
   return (
-    <div className="w-full">
-      <div className="h-1.5 w-full bg-squid-dark/50 rounded-full overflow-hidden relative">
-        <div
-          className={`h-full transition-all duration-1000 ease-linear ${isCritical ? 'bg-squid-pink animate-pulse' : 'bg-squid-green'}`}
-          style={{ width: `${progress}%` }}
-        />
+    <div className="flex justify-center">
+      <div className={`px-6 py-3 rounded-2xl font-mono font-bold text-lg transition-all ${
+        isCritical
+          ? 'bg-gradient-to-r from-red-500 to-orange-500 text-white animate-pulse shadow-lg shadow-red-500/50'
+          : 'bg-gradient-to-r from-yellow-500 to-amber-500 text-black shadow-lg shadow-yellow-500/30'
+      }`}>
+        ⏱ {minutes.toString().padStart(2, '0')}:{seconds.toString().padStart(2, '0')}
       </div>
     </div>
   );

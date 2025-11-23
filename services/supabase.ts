@@ -15,6 +15,8 @@ export interface Player {
   login: string | null;
   nickname: string;
   avatar: '○' | '△' | '□';
+  telegram_id?: number | null;
+  telegram_photo_url?: string | null;
   is_online: boolean;
   last_seen: string;
   created_at: string;

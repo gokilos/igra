@@ -819,24 +819,46 @@ const App: React.FC = () => {
   };
 
   const getPlayerAvatar = (player: Player): JSX.Element => {
+    // Проверяем сначала Telegram аватар
+    if (player.telegram_photo_url) {
+      return (
+        <img
+          src={player.telegram_photo_url}
+          alt={player.login || player.nickname}
+          className="w-full h-full rounded-full object-cover"
+          onError={(e) => {
+            const target = e.target as HTMLImageElement;
+            target.style.display = 'none';
+            // Показываем fallback - первую букву логина
+            if (target.parentElement) {
+              target.parentElement.innerHTML = `<span class="text-sm font-bold">${(player.login || player.nickname || '?')[0].toUpperCase()}</span>`;
+            }
+          }}
+        />
+      );
+    }
+
+    // Затем проверяем Character аватар
     const character = getCharacterById(player.avatar);
     if (character?.avatarPath) {
       return (
         <img
           src={character.avatarPath}
           alt={player.login || player.nickname}
-          className="w-8 h-8 rounded-full object-cover border-2 border-squid-pink"
+          className="w-full h-full rounded-full object-cover"
           onError={(e) => {
             const target = e.target as HTMLImageElement;
             target.style.display = 'none';
-            if (target.nextElementSibling) {
-              (target.nextElementSibling as HTMLElement).style.display = 'flex';
+            if (target.parentElement) {
+              target.parentElement.innerHTML = `<span class="text-sm font-bold">${(player.login || player.nickname || '?')[0].toUpperCase()}</span>`;
             }
           }}
         />
       );
     }
-    return <span className="text-xl">{player.avatar}</span>;
+
+    // Fallback к символу аватара
+    return <span className="text-lg">{player.avatar}</span>;
   };
 
   const getOpponentNickname = (): string => {
@@ -1587,10 +1609,10 @@ const App: React.FC = () => {
             return (
               <div
                 key={idx}
-                className={`w-6 h-6 sm:w-8 sm:h-8 border-2 flex items-center justify-center text-xs sm:text-sm font-bold rounded transition-all ${
+                className={`w-7 h-7 sm:w-9 sm:h-9 border-2 flex items-center justify-center text-sm sm:text-base font-bold rounded-lg transition-all ${
                   isMatch
-                    ? 'bg-squid-green/30 border-squid-green text-squid-green'
-                    : 'bg-gray-800 border-gray-600 text-gray-400'
+                    ? 'bg-gradient-to-br from-green-500 to-emerald-600 border-green-400 text-white shadow-lg'
+                    : 'bg-gray-800/50 border-gray-600 text-gray-400'
                 }`}
               >
                 {char}
@@ -1603,14 +1625,15 @@ const App: React.FC = () => {
 
     const mySecret = isCreator ? currentGame?.creator_secret : currentGame?.opponent_secret;
     const opponentSecretValue = isCreator ? currentGame?.opponent_secret : currentGame?.creator_secret;
+    const isMyTurn = currentGame?.current_turn === currentPlayer?.id;
 
     return (
-      <div className="h-screen flex flex-col mx-auto relative max-w-2xl">
-        {/* Sticky Header */}
-        <div className="sticky top-0 z-30 bg-squid-dark px-4 pt-3 pb-2 border-b border-gray-800">
+      <div className="h-screen flex flex-col mx-auto relative max-w-4xl bg-gradient-to-b from-gray-900 via-gray-800 to-gray-900">
+        {/* Sticky Header с таймером по центру */}
+        <div className="sticky top-0 z-30 bg-gradient-to-b from-gray-900 to-gray-900/95 backdrop-blur-md px-4 pt-4 pb-3 border-b border-gray-700/50">
           {/* Timer at the very top */}
           {status === GameStatus.PLAYING && (
-            <div className="mb-2">
+            <div className="mb-4">
               <Timer
                 duration={TURN_DURATION}
                 onTimeUp={handleTimeUp}
@@ -1619,59 +1642,117 @@ const App: React.FC = () => {
               />
             </div>
           )}
-          <div className="flex justify-between items-center">
-            <div className="flex gap-2 items-center">
-              {getOpponentAvatar()}
-              <span className="text-sm text-gray-400">{getOpponentNickname()}</span>
-            </div>
-            <div className="flex items-center gap-3">
-              {/* Мое загаданное слово/цифры - с выделением угаданных */}
+
+          {/* Два шейпа игроков - слева и справа */}
+          <div className="grid grid-cols-2 gap-4 mb-3">
+            {/* Левый шейп - Я */}
+            <div className="bg-gradient-to-br from-blue-600/20 to-purple-600/20 backdrop-blur-sm rounded-2xl p-3 border border-blue-500/30">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center text-white font-bold shadow-lg">
+                  {currentPlayer && getPlayerAvatar(currentPlayer)}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-bold text-white truncate">
+                    {currentPlayer?.login || currentPlayer?.nickname}
+                  </div>
+                  <div className="text-xs text-blue-300">ВЫ</div>
+                </div>
+              </div>
+              {/* Мое загаданное слово */}
               {status !== GameStatus.SETUP && mySecret && (
-                <div className="flex gap-0.5">
-                  {mySecret.split('').map((char, idx) => {
-                    const isRevealed = myRevealedIndices[idx];
-                    return (
-                      <div
-                        key={idx}
-                        className={`w-4 h-5 flex items-center justify-center text-[10px] font-mono font-bold rounded ${
-                          isRevealed
-                            ? 'bg-red-600 text-white border border-red-400'
-                            : 'bg-gray-800 text-squid-green border border-gray-700'
-                        }`}
-                      >
-                        {char}
-                      </div>
-                    );
-                  })}
+                <div>
+                  <div className="text-[10px] text-gray-400 mb-1">МОЁ СЛОВО:</div>
+                  <div className="flex gap-1 flex-wrap">
+                    {mySecret.split('').map((char, idx) => {
+                      const isRevealed = myRevealedIndices[idx];
+                      return (
+                        <div
+                          key={idx}
+                          className={`w-6 h-7 flex items-center justify-center text-xs font-mono font-bold rounded transition-all ${
+                            isRevealed
+                              ? 'bg-gradient-to-br from-red-500 to-pink-600 text-white border-2 border-red-400 shadow-lg animate-pulse'
+                              : 'bg-gray-800/70 text-blue-300 border border-blue-500/30'
+                          }`}
+                        >
+                          {char}
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
               )}
-              <div className="font-mono text-xs text-gray-400">
-                {currentGame?.prize && <span className="text-yellow-400 mr-2">💰 {currentGame.prize}</span>}
-                РАУНД {currentGame?.turn_count || 0}
-              </div>
-              <button onClick={handleBackToLobby} className="text-xs text-red-500 font-bold hover:underline uppercase">
-                Выход
-              </button>
             </div>
+
+            {/* Правый шейп - Оппонент */}
+            <div className="bg-gradient-to-br from-pink-600/20 to-orange-600/20 backdrop-blur-sm rounded-2xl p-3 border border-pink-500/30">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-pink-500 to-orange-500 flex items-center justify-center text-white font-bold shadow-lg">
+                  {getOpponentAvatar()}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-bold text-white truncate">
+                    {getOpponentNickname()}
+                  </div>
+                  <div className="text-xs text-pink-300">ОППОНЕНТ</div>
+                </div>
+              </div>
+              {/* Блок оппонента с звездочками и открытыми буквами */}
+              {status !== GameStatus.SETUP && (
+                <div>
+                  <div className="text-[10px] text-gray-400 mb-1">ЕГО СЛОВО:</div>
+                  <div className="flex gap-1 flex-wrap">
+                    {Array.from({ length: gameMode === GameMode.NUMBERS ? NUM_LENGTH : (currentGame?.word_length || 5) }).map((_, idx) => {
+                      const secret = opponentSecretValue || '';
+                      const char = secret[idx] || '*';
+                      const isRevealed = opponentRevealedIndices[idx];
+                      const showChar = isRevealed || status === GameStatus.GAME_OVER;
+
+                      return (
+                        <div
+                          key={idx}
+                          className={`w-6 h-7 flex items-center justify-center text-xs font-mono font-bold rounded transition-all ${
+                            isRevealed
+                              ? 'bg-gradient-to-br from-green-500 to-emerald-600 text-white border-2 border-green-400 shadow-lg'
+                              : 'bg-gray-800/70 text-gray-500 border border-pink-500/30'
+                          }`}
+                        >
+                          {showChar ? char : '★'}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Кнопка выхода и раунд */}
+          <div className="flex justify-between items-center text-xs">
+            <div className="font-mono text-gray-400">
+              {currentGame?.prize && <span className="text-yellow-400 mr-2">💰 {currentGame.prize}</span>}
+              РАУНД {currentGame?.turn_count || 0}
+            </div>
+            <button onClick={handleBackToLobby} className="text-red-400 font-bold hover:text-red-300 uppercase">
+              Выход
+            </button>
           </div>
         </div>
 
-        {/* Info Banner + Opponent Secret - Sticky */}
-        <div className="sticky top-[57px] z-20 bg-squid-dark px-4 pb-2">
-          <div className="bg-squid-panel border-l-4 border-squid-pink p-2 mb-2 font-mono text-sm text-center shadow-lg text-white">
+        {/* Панель статуса с пульсацией */}
+        <div className="sticky top-[200px] z-20 bg-gray-900/95 backdrop-blur-sm px-4 pb-2">
+          <div className={`p-3 rounded-xl font-bold text-sm text-center shadow-lg transition-all ${
+            status === GameStatus.PLAYING && isMyTurn
+              ? 'bg-gradient-to-r from-green-500 to-emerald-600 text-white animate-pulse shadow-green-500/50'
+              : status === GameStatus.PLAYING
+              ? 'bg-gradient-to-r from-orange-500 to-red-500 text-white shadow-orange-500/30'
+              : 'bg-gradient-to-r from-blue-500 to-purple-500 text-white shadow-blue-500/30'
+          }`}>
             {feedback}
           </div>
 
-          {/* Opponent's Secret - только блок оппонента */}
-          {status !== GameStatus.SETUP && (
-            <div className="mb-2">
-              {renderSecretDisplay(false)}
-            </div>
-          )}
-
           {/* My Secret Display - только для SETUP режима */}
           {status === GameStatus.SETUP && (
-            <div className="mb-2">
+            <div className="mb-2 mt-3">
               {renderSecretDisplay(true)}
             </div>
           )}
@@ -1680,21 +1761,22 @@ const App: React.FC = () => {
         {/* History - scrollable area with improved styling */}
         <div className="flex-1 px-4 pb-2 overflow-hidden">
           <div className="h-full overflow-y-auto pb-4" ref={scrollRef} style={{ scrollBehavior: 'smooth' }}>
-          <div className="flex items-center justify-between mb-3 sticky top-0 bg-squid-dark/95 backdrop-blur-sm py-2 z-10">
-            <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider">
+          <div className="flex items-center justify-between mb-4 sticky top-0 bg-gradient-to-b from-gray-900 to-gray-900/90 backdrop-blur-md py-3 z-10 rounded-xl">
+            <h3 className="text-sm font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-400 uppercase tracking-wider">
               📊 История ходов
             </h3>
-            <span className="text-[10px] text-gray-600 font-mono">
-              Всего: {guesses.length}
+            <span className="text-xs text-gray-500 font-mono px-3 py-1 bg-gray-800/50 rounded-full">
+              {guesses.length}
             </span>
           </div>
           {guesses.length === 0 ? (
-            <div className="text-center text-gray-600 text-xs py-8">
-              <div className="text-2xl mb-2">🎯</div>
-              История пуста<br/>Начните угадывать!
+            <div className="text-center text-gray-500 text-sm py-12">
+              <div className="text-6xl mb-4 opacity-20">🎯</div>
+              <div className="font-bold text-gray-400">История пуста</div>
+              <div className="text-xs text-gray-600 mt-2">Начните угадывать!</div>
             </div>
           ) : (
-            <div className="space-y-2 pb-4">
+            <div className="space-y-3 pb-4">
               {guesses.map((guess, idx) => {
                 const isMine = guess.player_id === currentPlayer?.id;
                 const targetSecret = isMine ? (opponentSecretValue || '') : (mySecret || '');
@@ -1702,26 +1784,32 @@ const App: React.FC = () => {
                 return (
                   <div
                     key={guess.id || idx}
-                    className={`rounded-lg p-2.5 border transition-all ${
+                    className={`rounded-xl p-3 border-2 transition-all transform hover:scale-[1.02] ${
                       isMine
-                        ? 'bg-squid-green/5 border-squid-green/30'
-                        : 'bg-squid-pink/5 border-squid-pink/30'
+                        ? 'bg-gradient-to-br from-blue-600/10 to-purple-600/10 border-blue-500/40 shadow-lg shadow-blue-500/10'
+                        : 'bg-gradient-to-br from-pink-600/10 to-orange-600/10 border-pink-500/40 shadow-lg shadow-pink-500/10'
                     }`}
                   >
-                    <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center justify-between mb-3">
                       <div className="flex items-center gap-2">
-                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${
+                        <span className={`text-xs font-bold px-3 py-1 rounded-full ${
                           isMine
-                            ? 'bg-squid-green/20 text-squid-green'
-                            : 'bg-squid-pink/20 text-squid-pink'
+                            ? 'bg-gradient-to-r from-blue-500 to-purple-500 text-white'
+                            : 'bg-gradient-to-r from-pink-500 to-orange-500 text-white'
                         }`}>
                           {isMine ? 'ВЫ' : 'ОПОНЕНТ'}
                         </span>
-                        <span className="text-[9px] text-gray-500 font-mono">
+                        <span className="text-xs text-gray-500 font-mono px-2 py-1 bg-gray-800/50 rounded">
                           #{idx + 1}
                         </span>
                       </div>
-                      <span className="text-[9px] text-gray-600 font-mono">
+                      <span className={`text-xs font-bold px-2 py-1 rounded ${
+                        guess.result.includes('ВЕРНО')
+                          ? 'bg-green-500/20 text-green-400'
+                          : guess.result.includes('ОТКРЫТО')
+                          ? 'bg-yellow-500/20 text-yellow-400'
+                          : 'bg-gray-700/50 text-gray-400'
+                      }`}>
                         {guess.result}
                       </span>
                     </div>
@@ -1735,12 +1823,12 @@ const App: React.FC = () => {
         </div>
 
         {/* Controls Area - Fixed at bottom */}
-        <div className="sticky bottom-0 z-20 bg-squid-dark px-4 pt-3 pb-4 border-t border-gray-800">
+        <div className="sticky bottom-0 z-20 bg-gradient-to-t from-gray-900 via-gray-900/95 to-transparent backdrop-blur-lg px-4 pt-4 pb-4 border-t border-gray-700/50">
           {/* Input Display */}
           {((status === GameStatus.PLAYING && currentGame?.current_turn === currentPlayer?.id) || status === GameStatus.SETUP) && (
             <div className="flex justify-center gap-2 mb-4">
               {Array.from({ length: gameMode === GameMode.NUMBERS ? NUM_LENGTH : (currentGame?.word_length || 5) }).map((_, i) => (
-                <div key={i} className="w-10 h-12 border-b-2 border-white flex items-center justify-center text-xl font-mono text-white">
+                <div key={i} className="w-12 h-14 border-2 border-purple-500/50 bg-gradient-to-br from-purple-900/20 to-blue-900/20 rounded-lg flex items-center justify-center text-2xl font-mono text-white font-bold shadow-lg backdrop-blur-sm">
                   {currentInput[i] || ''}
                 </div>
               ))}
