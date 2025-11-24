@@ -73,10 +73,22 @@ export interface Invitation {
 // Сервис для работы с игроками
 export class PlayerService {
   // Создать нового игрока с логином
-  static async createPlayer(login: string, avatar: '○' | '△' | '□'): Promise<Player | null> {
+  static async createPlayer(
+    login: string,
+    avatar: '○' | '△' | '□',
+    telegramId?: number | null,
+    telegramPhotoUrl?: string | null
+  ): Promise<Player | null> {
     const { data, error } = await supabase
       .from('players')
-      .insert([{ login, nickname: login, avatar, is_online: true }])
+      .insert([{
+        login,
+        nickname: login,
+        avatar,
+        is_online: true,
+        telegram_id: telegramId || null,
+        telegram_photo_url: telegramPhotoUrl || null
+      }])
       .select()
       .single();
 

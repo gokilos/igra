@@ -9,6 +9,7 @@ import { BattleshipGrid } from './components/BattleshipGrid';
 import { ShipPlacer } from './components/ShipPlacer';
 import { CHARACTERS } from './data/characters';
 import { haptic } from './utils/haptic';
+import { telegram } from './utils/telegram';
 import {
   PlayerService,
   GameService,
@@ -391,8 +392,13 @@ const App: React.FC = () => {
       return;
     }
 
+    // Получаем данные из Telegram API если доступны
+    const telegramUser = telegram.getUser();
+    const telegramId = telegramUser?.id || null;
+    const telegramPhotoUrl = telegramUser?.photo_url || null;
+
     // Создать игрока с валидным аватаром (○, △, □), чтобы пройти CHECK-constraint
-    const player = await PlayerService.createPlayer(trimmedLogin, selectedAvatar);
+    const player = await PlayerService.createPlayer(trimmedLogin, selectedAvatar, telegramId, telegramPhotoUrl);
     if (player) {
       setCurrentPlayer(player);
       setCurrentScreen(AppScreen.GAME);
@@ -1498,16 +1504,29 @@ const App: React.FC = () => {
     // Режим игры
     return (
       <div className="h-screen flex flex-col bg-gradient-to-b from-gray-900 via-blue-950 to-gray-900">
+        {/* Уведомление как полоска наверху */}
+        {status === GameStatus.PLAYING && (
+          <div className={`sticky top-0 z-40 py-1.5 px-4 text-center text-xs font-bold transition-all ${
+            currentGame?.current_turn === currentPlayer?.id
+              ? 'bg-gradient-to-r from-green-500 to-emerald-600 text-white animate-pulse'
+              : 'bg-gradient-to-r from-orange-500 to-red-500 text-white'
+          }`}>
+            {feedback}
+          </div>
+        )}
+
         {/* Заголовок */}
         <div className="sticky top-0 z-30 bg-gradient-to-b from-gray-900 to-gray-900/95 backdrop-blur-md px-4 pt-3 pb-2 border-b border-cyan-500/30 shadow-lg shadow-cyan-500/20">
           {status === GameStatus.PLAYING && (
-            <div className="mb-3">
-              <Timer
-                duration={TURN_DURATION}
-                onTimeUp={handleTimeUp}
-                isActive={true}
-                resetKey={timerResetKey}
-              />
+            <div className="mb-3 flex justify-center">
+              <div className="scale-75 origin-center">
+                <Timer
+                  duration={TURN_DURATION}
+                  onTimeUp={handleTimeUp}
+                  isActive={true}
+                  resetKey={timerResetKey}
+                />
+              </div>
             </div>
           )}
           <div className="flex justify-between items-center">
@@ -1532,16 +1551,6 @@ const App: React.FC = () => {
           </div>
         </div>
 
-        {/* Информация */}
-        <div className="sticky top-[130px] z-20 px-4 pb-3 pt-2">
-          <div className={`p-3 rounded-xl font-bold text-sm text-center shadow-lg transition-all ${
-            currentGame?.current_turn === currentPlayer?.id
-              ? 'bg-gradient-to-r from-green-500 to-emerald-600 text-white animate-pulse shadow-green-500/50 border border-green-400'
-              : 'bg-gradient-to-r from-orange-500 to-red-500 text-white shadow-orange-500/30 border border-orange-400'
-          }`}>
-            {feedback}
-          </div>
-        </div>
 
         {/* Игровые поля */}
         <div className="flex-1 overflow-auto p-4">
@@ -1661,30 +1670,35 @@ const App: React.FC = () => {
 
     return (
       <div className="h-screen flex flex-col mx-auto relative max-w-4xl bg-gradient-to-b from-gray-900 via-gray-800 to-gray-900">
+        {/* Уведомление как полоска наверху */}
+        {status === GameStatus.PLAYING && (
+          <div className={`sticky top-0 z-40 py-1.5 px-4 text-center text-xs font-bold transition-all ${
+            currentGame?.current_turn === currentPlayer?.id
+              ? 'bg-gradient-to-r from-green-500 to-emerald-600 text-white animate-pulse'
+              : 'bg-gradient-to-r from-orange-500 to-red-500 text-white'
+          }`}>
+            {feedback}
+          </div>
+        )}
+
         {/* Sticky Header с таймером по центру */}
-        <div className="sticky top-0 z-30 bg-gradient-to-b from-gray-900 to-gray-900/95 backdrop-blur-md px-4 pt-4 pb-3 border-b border-gray-700/50">
-          {/* Timer at the very top */}
+        <div className="sticky top-0 z-30 bg-gradient-to-b from-gray-900 to-gray-900/95 backdrop-blur-md px-4 pt-3 pb-2 border-b border-gray-700/50">
+          {/* Timer по центру - уменьшенный размер */}
           {status === GameStatus.PLAYING && (
-            <div className="mb-4 flex items-center justify-center gap-4">
-              <Timer
-                duration={TURN_DURATION}
-                onTimeUp={handleTimeUp}
-                isActive={true}
-                resetKey={timerResetKey}
-              />
-              {/* Рейтинг иконка */}
-              <div className="bg-gradient-to-r from-purple-600 to-pink-600 px-4 py-3 rounded-2xl shadow-lg shadow-purple-500/30 flex items-center gap-2">
-                <span className="text-lg">⭐</span>
-                <div className="text-xs font-bold text-white">
-                  <div className="text-[10px] text-purple-200">РЕЙТИНГ</div>
-                  <div className="text-base">{currentPlayer?.rating || 1200}</div>
-                </div>
+            <div className="mb-3 flex justify-center">
+              <div className="scale-75 origin-center">
+                <Timer
+                  duration={TURN_DURATION}
+                  onTimeUp={handleTimeUp}
+                  isActive={true}
+                  resetKey={timerResetKey}
+                />
               </div>
             </div>
           )}
 
           {/* Кнопка выхода и раунд */}
-          <div className="flex justify-between items-center text-xs mb-4">
+          <div className="flex justify-between items-center text-xs mb-3">
             <div className="font-mono text-gray-400">
               {currentGame?.prize && <span className="text-yellow-400 mr-2">💰 {currentGame.prize}</span>}
               РАУНД {currentGame?.turn_count || 0}
@@ -1798,29 +1812,19 @@ const App: React.FC = () => {
           </div>
         </div>
 
-        {/* Панель статуса с пульсацией */}
-        <div className="sticky top-[140px] z-20 bg-gray-900/95 backdrop-blur-sm px-4 pb-2 pt-2">
-          <div className={`p-3 rounded-xl font-bold text-sm text-center shadow-lg transition-all ${
-            status === GameStatus.PLAYING && isMyTurn
-              ? 'bg-gradient-to-r from-green-500 to-emerald-600 text-white animate-pulse shadow-green-500/50'
-              : status === GameStatus.PLAYING
-              ? 'bg-gradient-to-r from-orange-500 to-red-500 text-white shadow-orange-500/30'
-              : 'bg-gradient-to-r from-blue-500 to-purple-500 text-white shadow-blue-500/30'
-          }`}>
-            {feedback}
-          </div>
-
-          {/* My Secret Display - только для SETUP режима */}
-          {status === GameStatus.SETUP && (
-            <div className="mb-2 mt-3">
-              {renderSecretDisplay(true)}
+        {/* My Secret Display - только для SETUP режима */}
+        {status === GameStatus.SETUP && (
+          <div className="sticky top-0 z-20 bg-gray-900/95 backdrop-blur-sm px-4 pb-3 pt-3">
+            <div className="p-3 rounded-xl font-bold text-sm text-center bg-gradient-to-r from-blue-500 to-purple-500 text-white shadow-lg mb-3">
+              {feedback}
             </div>
-          )}
-        </div>
+            {renderSecretDisplay(true)}
+          </div>
+        )}
 
         {/* History - scrollable area with improved styling */}
         <div className="flex-1 px-4 pb-2 overflow-hidden">
-          <div className="h-full overflow-y-auto pb-4" ref={scrollRef} style={{ scrollBehavior: 'smooth' }}>
+          <div className="h-full overflow-y-auto pb-4" ref={scrollRef} style={{ scrollBehavior: 'smooth', touchAction: 'manipulation' }}>
           {guesses.length === 0 ? (
             <div className="text-center text-gray-500 text-sm py-12">
               <div className="text-6xl mb-4 opacity-20">🎯</div>
