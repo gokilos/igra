@@ -508,6 +508,12 @@ const App: React.FC = () => {
         // Creator starts the game
         await GameService.startGame(currentGame.id, currentPlayer.id);
       }
+
+      // Небольшая задержка перед сбросом флага для предотвращения двойных отправок
+      await new Promise(resolve => setTimeout(resolve, 300));
+    } catch (error) {
+      console.error('Error in handleSetupSubmit:', error);
+      haptic.error();
     } finally {
       setIsSubmitting(false);
     }
@@ -529,10 +535,16 @@ const App: React.FC = () => {
     try {
       // Get opponent's secret
       const game = await GameService.getGame(currentGame.id);
-      if (!game) return;
+      if (!game) {
+        console.error('Game not found');
+        return;
+      }
 
       const targetSecret = isCreator ? game.opponent_secret : game.creator_secret;
-      if (!targetSecret) return;
+      if (!targetSecret) {
+        console.error('Target secret not found');
+        return;
+      }
 
       const guess = currentInput;
       let matchCount = 0;
@@ -582,6 +594,13 @@ const App: React.FC = () => {
       }
 
       setCurrentInput('');
+
+      // Небольшая задержка перед сбросом флага для предотвращения двойных отправок
+      await new Promise(resolve => setTimeout(resolve, 300));
+    } catch (error) {
+      console.error('Error in handleSubmitGuess:', error);
+      haptic.error();
+      // При ошибке не очищаем ввод, чтобы пользователь мог повторить попытку
     } finally {
       setIsSubmitting(false);
     }
@@ -840,7 +859,8 @@ const App: React.FC = () => {
             target.style.display = 'none';
             // Показываем fallback - первую букву логина
             if (target.parentElement) {
-              target.parentElement.innerHTML = `<span class="text-sm font-bold">${(player.login || player.nickname || '?')[0].toUpperCase()}</span>`;
+              const letter = (player.login || player.nickname || '?')[0].toUpperCase();
+              target.parentElement.innerHTML = `<div class="w-full h-full rounded-full bg-gradient-to-br from-purple-600 to-blue-600 flex items-center justify-center"><span class="text-sm font-bold text-white">${letter}</span></div>`;
             }
           }}
         />
@@ -859,17 +879,19 @@ const App: React.FC = () => {
             const target = e.target as HTMLImageElement;
             target.style.display = 'none';
             if (target.parentElement) {
-              target.parentElement.innerHTML = `<span class="text-sm font-bold">${(player.login || player.nickname || '?')[0].toUpperCase()}</span>`;
+              const letter = (player.login || player.nickname || '?')[0].toUpperCase();
+              target.parentElement.innerHTML = `<div class="w-full h-full rounded-full bg-gradient-to-br from-purple-600 to-blue-600 flex items-center justify-center"><span class="text-sm font-bold text-white">${letter}</span></div>`;
             }
           }}
         />
       );
     }
 
-    // Fallback к символу аватара
+    // Fallback к первой букве логина вместо геометрических фигур
+    const letter = (player.login || player.nickname || '?')[0].toUpperCase();
     return (
-      <div className="w-full h-full rounded-full bg-gradient-to-br from-gray-700 to-gray-900 flex items-center justify-center">
-        <span className="text-lg">{player.avatar}</span>
+      <div className="w-full h-full rounded-full bg-gradient-to-br from-purple-600 to-blue-600 flex items-center justify-center">
+        <span className="text-lg font-bold text-white">{letter}</span>
       </div>
     );
   };
@@ -1685,7 +1707,7 @@ const App: React.FC = () => {
         <div className="sticky top-0 z-30 bg-gradient-to-b from-gray-900 to-gray-900/95 backdrop-blur-md px-4 pt-3 pb-2 border-b border-gray-700/50">
           {/* Timer по центру - уменьшенный размер */}
           {status === GameStatus.PLAYING && (
-            <div className="mb-3 flex justify-center">
+            <div className="mb-2 flex justify-center">
               <div className="scale-75 origin-center">
                 <Timer
                   duration={TURN_DURATION}
@@ -1696,6 +1718,27 @@ const App: React.FC = () => {
               </div>
             </div>
           )}
+
+          {/* Точки игроков - сразу под таймером */}
+          <div className="flex justify-center items-center gap-6 mb-3">
+            {/* Мои точки */}
+            <div className="flex items-center gap-2 text-xs">
+              <span className="text-blue-300 font-bold">{currentPlayer?.login || currentPlayer?.nickname}</span>
+              <span className="text-gray-500">:</span>
+              <span className="text-yellow-400 font-bold">{currentPlayer?.games_won || 0}П</span>
+            </div>
+            <div className="text-gray-600">VS</div>
+            {/* Точки оппонента */}
+            <div className="flex items-center gap-2 text-xs">
+              <span className="text-yellow-400 font-bold">{(() => {
+                const opponentId = isCreator ? currentGame?.opponent_id : currentGame?.creator_id;
+                const opponent = onlinePlayers.find(p => p.id === opponentId);
+                return opponent?.games_won || 0;
+              })()}П</span>
+              <span className="text-gray-500">:</span>
+              <span className="text-pink-300 font-bold">{getOpponentNickname()}</span>
+            </div>
+          </div>
 
           {/* Кнопка выхода и раунд */}
           <div className="flex justify-between items-center text-xs mb-3">
@@ -1720,12 +1763,8 @@ const App: React.FC = () => {
                   <div className="text-sm font-bold text-white truncate">
                     {currentPlayer?.login || currentPlayer?.nickname}
                   </div>
-                  <div className="flex items-center gap-2 text-xs">
-                    <span className="text-blue-300">ВЫ</span>
-                    <span className="text-yellow-400">⭐{currentPlayer?.rating || 1200}</span>
-                  </div>
-                  <div className="text-[10px] text-gray-400">
-                    {currentPlayer?.games_won || 0}П / {currentPlayer?.games_lost || 0}П
+                  <div className="text-xs text-blue-300">
+                    ВЫ
                   </div>
                 </div>
               </div>
@@ -1764,20 +1803,8 @@ const App: React.FC = () => {
                   <div className="text-sm font-bold text-white truncate">
                     {getOpponentNickname()}
                   </div>
-                  <div className="flex items-center gap-2 text-xs">
-                    <span className="text-pink-300">ОППОНЕНТ</span>
-                    {(() => {
-                      const opponentId = isCreator ? currentGame?.opponent_id : currentGame?.creator_id;
-                      const opponent = onlinePlayers.find(p => p.id === opponentId);
-                      return <span className="text-yellow-400">⭐{opponent?.rating || 1200}</span>;
-                    })()}
-                  </div>
-                  <div className="text-[10px] text-gray-400">
-                    {(() => {
-                      const opponentId = isCreator ? currentGame?.opponent_id : currentGame?.creator_id;
-                      const opponent = onlinePlayers.find(p => p.id === opponentId);
-                      return `${opponent?.games_won || 0}П / ${opponent?.games_lost || 0}П`;
-                    })()}
+                  <div className="text-xs text-pink-300">
+                    ОППОНЕНТ
                   </div>
                 </div>
               </div>
@@ -1840,7 +1867,7 @@ const App: React.FC = () => {
                 return (
                   <div
                     key={guess.id || idx}
-                    className={`rounded-xl p-3 border-2 transition-all transform hover:scale-[1.02] ${
+                    className={`rounded-xl p-3 border-2 transition-colors ${
                       isMine
                         ? 'bg-gradient-to-br from-blue-600/10 to-purple-600/10 border-blue-500/40 shadow-lg shadow-blue-500/10'
                         : 'bg-gradient-to-br from-pink-600/10 to-orange-600/10 border-pink-500/40 shadow-lg shadow-pink-500/10'
