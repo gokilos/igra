@@ -4,6 +4,10 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <title>Siberian Squid Games</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;700;900&family=Exo+2:wght@300;400;600;700;800&family=Rajdhani:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
       tailwind.config = {
@@ -19,7 +23,9 @@
             },
             fontFamily: {
               mono: ['"Courier New"', 'Courier', 'monospace'],
-              sans: ['"Segoe UI"', 'Roboto', 'Helvetica', 'Arial', 'sans-serif'],
+              sans: ['"Exo 2"', 'sans-serif'],
+              display: ['"Orbitron"', 'sans-serif'],
+              heading: ['"Rajdhani"', 'sans-serif'],
             },
             animation: {
               'pulse-fast': 'pulse 1s cubic-bezier(0.4, 0, 0.6, 1) infinite',
@@ -78,6 +84,64 @@
       /* Radial Gradient */
       .bg-gradient-radial {
         background-image: radial-gradient(circle, var(--tw-gradient-stops));
+      }
+      /* Carousel Styles */
+      .carousel-container {
+        overflow-x: auto;
+        scroll-snap-type: x mandatory;
+        scrollbar-width: none;
+        -ms-overflow-style: none;
+        scroll-behavior: smooth;
+      }
+      .carousel-container::-webkit-scrollbar {
+        display: none;
+      }
+      .carousel-item {
+        scroll-snap-align: center;
+        scroll-snap-stop: always;
+      }
+      /* Game Card Hover Effects */
+      .game-card {
+        transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+      }
+      .game-card:hover {
+        transform: translateY(-8px) scale(1.02);
+      }
+      .game-card-image {
+        transition: transform 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+      }
+      .game-card:hover .game-card-image {
+        transform: scale(1.1);
+      }
+      /* Gradient Backgrounds */
+      .gradient-purple-pink {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%);
+      }
+      .gradient-purple-dark {
+        background: linear-gradient(180deg, rgba(102, 126, 234, 0.15) 0%, rgba(17, 24, 39, 0.95) 100%);
+      }
+      /* Button Glow */
+      .btn-glow {
+        box-shadow: 0 0 20px rgba(255, 0, 122, 0.5);
+        transition: all 0.3s ease;
+      }
+      .btn-glow:hover {
+        box-shadow: 0 0 30px rgba(255, 0, 122, 0.8), 0 0 60px rgba(255, 0, 122, 0.4);
+        transform: translateY(-2px);
+      }
+      /* Slide in animation */
+      @keyframes slideInRight {
+        from {
+          opacity: 0;
+          transform: translateX(100px);
+        }
+        to {
+          opacity: 1;
+          transform: translateX(0);
+        }
+      }
+      .animate-slide-in {
+        animation: slideInRight 0.6s ease-out forwards;
       }
     </style>
   <script type="importmap">
