@@ -106,11 +106,14 @@ export class PlayerService {
       .from('players')
       .select('id')
       .ilike('login', login)
+      .eq('is_online', true) // Проверяем только активных игроков
       .limit(1);
 
     if (error) {
       console.error('Error checking login:', error);
-      return false;
+      // При ошибке считаем логин доступным, чтобы не блокировать вход
+      // Реальная проверка произойдет при создании игрока (уникальный индекс в БД)
+      return true;
     }
 
     return data.length === 0;

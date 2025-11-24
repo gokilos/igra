@@ -537,13 +537,13 @@ const App: React.FC = () => {
       const game = await GameService.getGame(currentGame.id);
       if (!game) {
         console.error('Game not found');
-        return;
+        throw new Error('Game not found');
       }
 
       const targetSecret = isCreator ? game.opponent_secret : game.creator_secret;
       if (!targetSecret) {
         console.error('Target secret not found');
-        return;
+        throw new Error('Target secret not found');
       }
 
       const guess = currentInput;
@@ -1692,64 +1692,27 @@ const App: React.FC = () => {
 
     return (
       <div className="h-screen flex flex-col mx-auto relative max-w-4xl bg-gradient-to-b from-gray-900 via-gray-800 to-gray-900">
-        {/* Уведомление как полоска наверху */}
+        {/* Уведомление как полоска наверху с таймером справа */}
         {status === GameStatus.PLAYING && (
-          <div className={`sticky top-0 z-40 py-1.5 px-4 text-center text-xs font-bold transition-all ${
+          <div className={`sticky top-0 z-40 py-2 px-4 flex items-center justify-between text-xs font-bold transition-all ${
             currentGame?.current_turn === currentPlayer?.id
               ? 'bg-gradient-to-r from-green-500 to-emerald-600 text-white animate-pulse'
               : 'bg-gradient-to-r from-orange-500 to-red-500 text-white'
           }`}>
-            {feedback}
+            <div className="flex-1 text-center">{feedback}</div>
+            <div className="flex-shrink-0 ml-2 scale-50 origin-right">
+              <Timer
+                duration={TURN_DURATION}
+                onTimeUp={handleTimeUp}
+                isActive={true}
+                resetKey={timerResetKey}
+              />
+            </div>
           </div>
         )}
 
-        {/* Sticky Header с таймером по центру */}
-        <div className="sticky top-0 z-30 bg-gradient-to-b from-gray-900 to-gray-900/95 backdrop-blur-md px-4 pt-3 pb-2 border-b border-gray-700/50">
-          {/* Timer по центру - уменьшенный размер */}
-          {status === GameStatus.PLAYING && (
-            <div className="mb-2 flex justify-center">
-              <div className="scale-75 origin-center">
-                <Timer
-                  duration={TURN_DURATION}
-                  onTimeUp={handleTimeUp}
-                  isActive={true}
-                  resetKey={timerResetKey}
-                />
-              </div>
-            </div>
-          )}
-
-          {/* Точки игроков - сразу под таймером */}
-          <div className="flex justify-center items-center gap-6 mb-3">
-            {/* Мои точки */}
-            <div className="flex items-center gap-2 text-xs">
-              <span className="text-blue-300 font-bold">{currentPlayer?.login || currentPlayer?.nickname}</span>
-              <span className="text-gray-500">:</span>
-              <span className="text-yellow-400 font-bold">{currentPlayer?.games_won || 0}П</span>
-            </div>
-            <div className="text-gray-600">VS</div>
-            {/* Точки оппонента */}
-            <div className="flex items-center gap-2 text-xs">
-              <span className="text-yellow-400 font-bold">{(() => {
-                const opponentId = isCreator ? currentGame?.opponent_id : currentGame?.creator_id;
-                const opponent = onlinePlayers.find(p => p.id === opponentId);
-                return opponent?.games_won || 0;
-              })()}П</span>
-              <span className="text-gray-500">:</span>
-              <span className="text-pink-300 font-bold">{getOpponentNickname()}</span>
-            </div>
-          </div>
-
-          {/* Кнопка выхода и раунд */}
-          <div className="flex justify-between items-center text-xs mb-3">
-            <div className="font-mono text-gray-400">
-              {currentGame?.prize && <span className="text-yellow-400 mr-2">💰 {currentGame.prize}</span>}
-              РАУНД {currentGame?.turn_count || 0}
-            </div>
-            <button onClick={handleBackToLobby} className="text-red-400 font-bold hover:text-red-300 uppercase">
-              Выход
-            </button>
-          </div>
+        {/* Sticky Header */}
+        <div className="sticky top-0 z-30 bg-gradient-to-b from-gray-900 to-gray-900/95 backdrop-blur-md px-4 pt-2 pb-2 border-b border-gray-700/50">
 
           {/* Два шейпа игроков - слева и справа */}
           <div className="grid grid-cols-2 gap-4 mb-3">
@@ -1763,8 +1726,9 @@ const App: React.FC = () => {
                   <div className="text-sm font-bold text-white truncate">
                     {currentPlayer?.login || currentPlayer?.nickname}
                   </div>
-                  <div className="text-xs text-blue-300">
-                    ВЫ
+                  <div className="text-xs text-blue-300 flex items-center gap-1">
+                    <span>ВЫ</span>
+                    <span className="text-yellow-400">• {currentPlayer?.games_won || 0}🏆</span>
                   </div>
                 </div>
               </div>
@@ -1803,8 +1767,13 @@ const App: React.FC = () => {
                   <div className="text-sm font-bold text-white truncate">
                     {getOpponentNickname()}
                   </div>
-                  <div className="text-xs text-pink-300">
-                    ОППОНЕНТ
+                  <div className="text-xs text-pink-300 flex items-center gap-1">
+                    <span>ОППОНЕНТ</span>
+                    <span className="text-yellow-400">• {(() => {
+                      const opponentId = isCreator ? currentGame?.opponent_id : currentGame?.creator_id;
+                      const opponent = onlinePlayers.find(p => p.id === opponentId);
+                      return opponent?.games_won || 0;
+                    })()}🏆</span>
                   </div>
                 </div>
               </div>
@@ -1836,6 +1805,17 @@ const App: React.FC = () => {
                 </div>
               )}
             </div>
+          </div>
+
+          {/* Кнопка выхода и раунд */}
+          <div className="flex justify-between items-center text-xs mb-2 mt-2">
+            <div className="font-mono text-gray-400">
+              {currentGame?.prize && <span className="text-yellow-400 mr-2">💰 {currentGame.prize}</span>}
+              РАУНД {currentGame?.turn_count || 0}
+            </div>
+            <button onClick={handleBackToLobby} className="text-red-400 font-bold hover:text-red-300 uppercase text-[10px]">
+              Выход
+            </button>
           </div>
         </div>
 
