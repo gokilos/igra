@@ -1653,6 +1653,17 @@ const App: React.FC = () => {
             </div>
           )}
 
+          {/* Кнопка выхода и раунд */}
+          <div className="flex justify-between items-center text-xs mb-4">
+            <div className="font-mono text-gray-400">
+              {currentGame?.prize && <span className="text-yellow-400 mr-2">💰 {currentGame.prize}</span>}
+              РАУНД {currentGame?.turn_count || 0}
+            </div>
+            <button onClick={handleBackToLobby} className="text-red-400 font-bold hover:text-red-300 uppercase">
+              Выход
+            </button>
+          </div>
+
           {/* Два шейпа игроков - слева и справа */}
           <div className="grid grid-cols-2 gap-4 mb-3">
             {/* Левый шейп - Я */}
@@ -1735,21 +1746,10 @@ const App: React.FC = () => {
               )}
             </div>
           </div>
-
-          {/* Кнопка выхода и раунд */}
-          <div className="flex justify-between items-center text-xs">
-            <div className="font-mono text-gray-400">
-              {currentGame?.prize && <span className="text-yellow-400 mr-2">💰 {currentGame.prize}</span>}
-              РАУНД {currentGame?.turn_count || 0}
-            </div>
-            <button onClick={handleBackToLobby} className="text-red-400 font-bold hover:text-red-300 uppercase">
-              Выход
-            </button>
-          </div>
         </div>
 
         {/* Панель статуса с пульсацией */}
-        <div className="sticky top-[200px] z-20 bg-gray-900/95 backdrop-blur-sm px-4 pb-2">
+        <div className="sticky top-[140px] z-20 bg-gray-900/95 backdrop-blur-sm px-4 pb-2 pt-2">
           <div className={`p-3 rounded-xl font-bold text-sm text-center shadow-lg transition-all ${
             status === GameStatus.PLAYING && isMyTurn
               ? 'bg-gradient-to-r from-green-500 to-emerald-600 text-white animate-pulse shadow-green-500/50'
@@ -1771,14 +1771,6 @@ const App: React.FC = () => {
         {/* History - scrollable area with improved styling */}
         <div className="flex-1 px-4 pb-2 overflow-hidden">
           <div className="h-full overflow-y-auto pb-4" ref={scrollRef} style={{ scrollBehavior: 'smooth' }}>
-          <div className="flex items-center justify-between mb-4 sticky top-0 bg-gradient-to-b from-gray-900 to-gray-900/90 backdrop-blur-md py-3 z-10 rounded-xl">
-            <h3 className="text-sm font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-400 uppercase tracking-wider">
-              📊 История ходов
-            </h3>
-            <span className="text-xs text-gray-500 font-mono px-3 py-1 bg-gray-800/50 rounded-full">
-              {guesses.length}
-            </span>
-          </div>
           {guesses.length === 0 ? (
             <div className="text-center text-gray-500 text-sm py-12">
               <div className="text-6xl mb-4 opacity-20">🎯</div>
