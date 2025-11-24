@@ -786,7 +786,10 @@ const App: React.FC = () => {
   };
 
   const handleStartGame = () => {
-    setCurrentScreen(AppScreen.CHARACTER_SELECT);
+    // Устанавливаем дефолтного персонажа и сразу переходим к логину
+    const defaultCharacter = CHARACTERS[0]; // Первый персонаж по умолчанию
+    setSelectedCharacter(defaultCharacter);
+    setCurrentScreen(AppScreen.LOGIN);
   };
 
   const handleCharacterSelect = (character: Character) => {
@@ -1098,7 +1101,7 @@ const App: React.FC = () => {
                       className="carousel-item flex-shrink-0 w-[85vw] max-w-md animate-slide-in"
                       style={{ animationDelay: `${index * 100}ms` }}
                     >
-                      <div className="game-card relative h-[420px] rounded-3xl overflow-hidden shadow-2xl">
+                      <div className="game-card relative h-[340px] rounded-3xl overflow-hidden shadow-2xl">
                         {/* Background Image Placeholder */}
                         <div
                           className="absolute inset-0 game-card-image"
@@ -1494,11 +1497,11 @@ const App: React.FC = () => {
 
     // Режим игры
     return (
-      <div className="h-screen flex flex-col bg-squid-dark">
+      <div className="h-screen flex flex-col bg-gradient-to-b from-gray-900 via-blue-950 to-gray-900">
         {/* Заголовок */}
-        <div className="sticky top-0 z-30 bg-squid-dark px-4 pt-3 pb-2 border-b border-gray-800">
+        <div className="sticky top-0 z-30 bg-gradient-to-b from-gray-900 to-gray-900/95 backdrop-blur-md px-4 pt-3 pb-2 border-b border-cyan-500/30 shadow-lg shadow-cyan-500/20">
           {status === GameStatus.PLAYING && (
-            <div className="mb-2">
+            <div className="mb-3">
               <Timer
                 duration={TURN_DURATION}
                 onTimeUp={handleTimeUp}
@@ -1508,16 +1511,21 @@ const App: React.FC = () => {
             </div>
           )}
           <div className="flex justify-between items-center">
-            <div className="flex gap-2 items-center">
-              {getOpponentAvatar()}
-              <span className="text-sm text-gray-400">{getOpponentNickname()}</span>
+            <div className="flex gap-3 items-center bg-gradient-to-r from-cyan-900/30 to-blue-900/30 px-3 py-2 rounded-xl border border-cyan-500/20">
+              <div className="w-10 h-10 rounded-full overflow-hidden shadow-lg ring-2 ring-cyan-400/50">
+                {getOpponentAvatar()}
+              </div>
+              <div>
+                <div className="text-xs text-cyan-400 font-bold">{getOpponentNickname()}</div>
+                <div className="text-[10px] text-gray-500">ПРОТИВНИК</div>
+              </div>
             </div>
             <div className="flex items-center gap-3">
-              <div className="font-mono text-xs text-gray-400">
+              <div className="font-mono text-xs bg-gradient-to-r from-purple-900/30 to-pink-900/30 px-3 py-2 rounded-xl border border-purple-500/20">
                 {currentGame?.prize && <span className="text-yellow-400 mr-2">💰 {currentGame.prize}</span>}
-                РАУНД {currentGame?.turn_count || 0}
+                <span className="text-purple-400">РАУНД {currentGame?.turn_count || 0}</span>
               </div>
-              <button onClick={handleBackToLobby} className="text-xs text-red-500 font-bold hover:underline uppercase">
+              <button onClick={handleBackToLobby} className="text-xs text-red-400 font-bold hover:text-red-300 bg-red-900/30 px-3 py-2 rounded-xl border border-red-500/20 hover:bg-red-900/50 transition-all uppercase">
                 Выход
               </button>
             </div>
@@ -1525,20 +1533,29 @@ const App: React.FC = () => {
         </div>
 
         {/* Информация */}
-        <div className="sticky top-[57px] z-20 bg-squid-dark px-4 pb-2">
-          <div className="bg-squid-panel border-l-4 border-squid-pink p-2 mb-2 font-mono text-sm text-center shadow-lg text-white">
+        <div className="sticky top-[130px] z-20 px-4 pb-3 pt-2">
+          <div className={`p-3 rounded-xl font-bold text-sm text-center shadow-lg transition-all ${
+            currentGame?.current_turn === currentPlayer?.id
+              ? 'bg-gradient-to-r from-green-500 to-emerald-600 text-white animate-pulse shadow-green-500/50 border border-green-400'
+              : 'bg-gradient-to-r from-orange-500 to-red-500 text-white shadow-orange-500/30 border border-orange-400'
+          }`}>
             {feedback}
           </div>
         </div>
 
         {/* Игровые поля */}
         <div className="flex-1 overflow-auto p-4">
-          <div className="max-w-4xl mx-auto space-y-6">
+          <div className="max-w-5xl mx-auto space-y-6">
             {/* Поле оппонента (для стрельбы) */}
-            <div className="bg-squid-panel border border-gray-800 rounded p-4">
-              <h3 className="text-sm font-bold text-squid-pink mb-3 text-center">
-                ПОЛЕ ПРОТИВНИКА
-              </h3>
+            <div className="bg-gradient-to-br from-red-900/20 to-orange-900/20 border-2 border-red-500/30 rounded-2xl p-5 shadow-2xl shadow-red-500/20 backdrop-blur-sm">
+              <div className="flex items-center justify-center gap-3 mb-4">
+                <div className="w-8 h-8 rounded-full overflow-hidden shadow-lg ring-2 ring-red-400/50">
+                  {getOpponentAvatar()}
+                </div>
+                <h3 className="text-base font-bold text-red-400 uppercase tracking-wider">
+                  🎯 Поле противника - {getOpponentNickname()}
+                </h3>
+              </div>
               <div className="flex justify-center">
                 <BattleshipGrid
                   mode="playing"
@@ -1552,10 +1569,15 @@ const App: React.FC = () => {
             </div>
 
             {/* Моё поле */}
-            <div className="bg-squid-panel border border-gray-800 rounded p-4">
-              <h3 className="text-sm font-bold text-squid-green mb-3 text-center">
-                ВАШЕ ПОЛЕ
-              </h3>
+            <div className="bg-gradient-to-br from-cyan-900/20 to-blue-900/20 border-2 border-cyan-500/30 rounded-2xl p-5 shadow-2xl shadow-cyan-500/20 backdrop-blur-sm">
+              <div className="flex items-center justify-center gap-3 mb-4">
+                <div className="w-8 h-8 rounded-full overflow-hidden shadow-lg ring-2 ring-cyan-400/50">
+                  {currentPlayer && getPlayerAvatar(currentPlayer)}
+                </div>
+                <h3 className="text-base font-bold text-cyan-400 uppercase tracking-wider">
+                  🛡️ Ваше поле - {currentPlayer?.login || currentPlayer?.nickname}
+                </h3>
+              </div>
               <div className="flex justify-center">
                 <BattleshipGrid
                   mode="playing"
@@ -1643,13 +1665,21 @@ const App: React.FC = () => {
         <div className="sticky top-0 z-30 bg-gradient-to-b from-gray-900 to-gray-900/95 backdrop-blur-md px-4 pt-4 pb-3 border-b border-gray-700/50">
           {/* Timer at the very top */}
           {status === GameStatus.PLAYING && (
-            <div className="mb-4">
+            <div className="mb-4 flex items-center justify-center gap-4">
               <Timer
                 duration={TURN_DURATION}
                 onTimeUp={handleTimeUp}
                 isActive={true}
                 resetKey={timerResetKey}
               />
+              {/* Рейтинг иконка */}
+              <div className="bg-gradient-to-r from-purple-600 to-pink-600 px-4 py-3 rounded-2xl shadow-lg shadow-purple-500/30 flex items-center gap-2">
+                <span className="text-lg">⭐</span>
+                <div className="text-xs font-bold text-white">
+                  <div className="text-[10px] text-purple-200">РЕЙТИНГ</div>
+                  <div className="text-base">{currentPlayer?.rating || 1200}</div>
+                </div>
+              </div>
             </div>
           )}
 
@@ -1676,7 +1706,13 @@ const App: React.FC = () => {
                   <div className="text-sm font-bold text-white truncate">
                     {currentPlayer?.login || currentPlayer?.nickname}
                   </div>
-                  <div className="text-xs text-blue-300">ВЫ</div>
+                  <div className="flex items-center gap-2 text-xs">
+                    <span className="text-blue-300">ВЫ</span>
+                    <span className="text-yellow-400">⭐{currentPlayer?.rating || 1200}</span>
+                  </div>
+                  <div className="text-[10px] text-gray-400">
+                    {currentPlayer?.games_won || 0}П / {currentPlayer?.games_lost || 0}П
+                  </div>
                 </div>
               </div>
               {/* Мое загаданное слово */}
@@ -1714,7 +1750,21 @@ const App: React.FC = () => {
                   <div className="text-sm font-bold text-white truncate">
                     {getOpponentNickname()}
                   </div>
-                  <div className="text-xs text-pink-300">ОППОНЕНТ</div>
+                  <div className="flex items-center gap-2 text-xs">
+                    <span className="text-pink-300">ОППОНЕНТ</span>
+                    {(() => {
+                      const opponentId = isCreator ? currentGame?.opponent_id : currentGame?.creator_id;
+                      const opponent = onlinePlayers.find(p => p.id === opponentId);
+                      return <span className="text-yellow-400">⭐{opponent?.rating || 1200}</span>;
+                    })()}
+                  </div>
+                  <div className="text-[10px] text-gray-400">
+                    {(() => {
+                      const opponentId = isCreator ? currentGame?.opponent_id : currentGame?.creator_id;
+                      const opponent = onlinePlayers.find(p => p.id === opponentId);
+                      return `${opponent?.games_won || 0}П / ${opponent?.games_lost || 0}П`;
+                    })()}
+                  </div>
                 </div>
               </div>
               {/* Блок оппонента с звездочками и открытыми буквами */}

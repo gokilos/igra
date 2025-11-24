@@ -20,6 +20,10 @@ export interface Player {
   is_online: boolean;
   last_seen: string;
   created_at: string;
+  rating?: number;
+  games_won?: number;
+  games_lost?: number;
+  games_draw?: number;
 }
 
 export interface Game {
