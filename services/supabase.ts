@@ -106,7 +106,6 @@ export class PlayerService {
       .from('players')
       .select('id')
       .ilike('login', login)
-      .eq('is_online', true) // Проверяем только активных игроков
       .limit(1);
 
     if (error) {
@@ -116,6 +115,7 @@ export class PlayerService {
       return true;
     }
 
+    // Логин доступен, если не найдено ни одного игрока с таким логином
     return data.length === 0;
   }
 
