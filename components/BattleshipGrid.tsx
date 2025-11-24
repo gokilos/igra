@@ -57,7 +57,7 @@ export const BattleshipGrid: React.FC<BattleshipGridProps> = ({
 
   // Получает класс для клетки
   const getCellClassName = (row: number, col: number): string => {
-    const base = 'w-6 h-6 sm:w-8 sm:h-8 border transition-all duration-200 flex items-center justify-center text-xs font-bold';
+    const base = 'w-7 h-7 sm:w-9 sm:h-9 border-2 transition-all duration-200 flex items-center justify-center text-base font-bold rounded-sm';
     const hitResult = getCellHitResult(row, col, hits);
     const isShip = isShipCell(row, col);
     const isHighlight = isHighlighted(row, col);
@@ -65,36 +65,36 @@ export const BattleshipGrid: React.FC<BattleshipGridProps> = ({
     // В режиме setup
     if (mode === 'setup') {
       if (isHighlight) {
-        return `${base} ${isValid ? 'bg-green-500/50 border-green-400' : 'bg-red-500/50 border-red-400'} cursor-pointer`;
+        return `${base} ${isValid ? 'bg-green-500/60 border-green-400 shadow-lg shadow-green-500/50' : 'bg-red-500/60 border-red-400 shadow-lg shadow-red-500/50'} cursor-pointer`;
       }
       if (showShips && isShip) {
-        return `${base} bg-gray-600 border-gray-500`;
+        return `${base} bg-gradient-to-br from-gray-600 to-gray-700 border-gray-500 shadow-md`;
       }
-      return `${base} bg-blue-900/50 border-blue-700 hover:bg-blue-800/50 cursor-pointer`;
+      return `${base} bg-gradient-to-br from-blue-900/60 to-blue-800/60 border-blue-600/80 hover:bg-blue-700/70 hover:border-blue-500 hover:shadow-lg hover:shadow-blue-500/30 cursor-pointer`;
     }
 
     // В режиме playing
     if (hitResult) {
       if (hitResult.result === 'hit') {
-        return `${base} bg-orange-600 border-orange-500`;
+        return `${base} bg-gradient-to-br from-orange-500 to-red-600 border-orange-400 shadow-lg shadow-orange-500/50`;
       } else if (hitResult.result === 'sunk') {
-        return `${base} bg-red-700 border-red-600`;
+        return `${base} bg-gradient-to-br from-red-600 to-red-800 border-red-500 shadow-lg shadow-red-600/60`;
       } else {
-        return `${base} bg-blue-300 border-blue-400`;
+        return `${base} bg-gradient-to-br from-cyan-400 to-blue-500 border-cyan-300 shadow-md`;
       }
     }
 
     // Показываем свои корабли
     if (showShips && isShip) {
-      return `${base} bg-gray-600 border-gray-500`;
+      return `${base} bg-gradient-to-br from-gray-600 to-gray-700 border-gray-500 shadow-md`;
     }
 
     // Клетка доступна для выстрела
     if (isMyTurn && !hitResult) {
-      return `${base} bg-blue-900/50 border-blue-700 hover:bg-yellow-300/30 cursor-pointer`;
+      return `${base} bg-gradient-to-br from-blue-900/60 to-blue-800/60 border-blue-600/80 hover:bg-yellow-400/50 hover:border-yellow-400 hover:shadow-lg hover:shadow-yellow-400/40 cursor-pointer transform hover:scale-110`;
     }
 
-    return `${base} bg-blue-900/50 border-blue-700`;
+    return `${base} bg-gradient-to-br from-blue-900/60 to-blue-800/60 border-blue-700/60`;
   };
 
   // Получает символ для клетки
@@ -113,14 +113,14 @@ export const BattleshipGrid: React.FC<BattleshipGridProps> = ({
   };
 
   return (
-    <div className="inline-block">
+    <div className="inline-block bg-gradient-to-br from-gray-900 to-gray-800 p-3 rounded-xl shadow-2xl border border-gray-700">
       {/* Заголовок с буквами колонок */}
-      <div className="flex mb-1">
-        <div className="w-6 h-6 sm:w-8 sm:h-8" /> {/* Пустая клетка для угла */}
+      <div className="flex mb-2">
+        <div className="w-7 h-7 sm:w-9 sm:h-9" /> {/* Пустая клетка для угла */}
         {Array.from({ length: GRID_SIZE }, (_, i) => (
           <div
             key={i}
-            className="w-6 h-6 sm:w-8 sm:h-8 flex items-center justify-center text-xs text-gray-400 font-mono"
+            className="w-7 h-7 sm:w-9 sm:h-9 flex items-center justify-center text-sm text-cyan-400 font-bold font-mono"
           >
             {i + 1}
           </div>
@@ -131,7 +131,7 @@ export const BattleshipGrid: React.FC<BattleshipGridProps> = ({
       {Array.from({ length: GRID_SIZE }, (_, row) => (
         <div key={row} className="flex">
           {/* Номер строки */}
-          <div className="w-6 h-6 sm:w-8 sm:h-8 flex items-center justify-center text-xs text-gray-400 font-mono mr-1">
+          <div className="w-7 h-7 sm:w-9 sm:h-9 flex items-center justify-center text-sm text-cyan-400 font-bold font-mono mr-1">
             {rowToLetter(row)}
           </div>
 

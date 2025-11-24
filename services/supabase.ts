@@ -20,6 +20,10 @@ export interface Player {
   is_online: boolean;
   last_seen: string;
   created_at: string;
+  rating?: number;
+  games_won?: number;
+  games_lost?: number;
+  games_draw?: number;
 }
 
 export interface Game {
@@ -69,10 +73,22 @@ export interface Invitation {
 // Сервис для работы с игроками
 export class PlayerService {
   // Создать нового игрока с логином
-  static async createPlayer(login: string, avatar: '○' | '△' | '□'): Promise<Player | null> {
+  static async createPlayer(
+    login: string,
+    avatar: '○' | '△' | '□',
+    telegramId?: number | null,
+    telegramPhotoUrl?: string | null
+  ): Promise<Player | null> {
     const { data, error } = await supabase
       .from('players')
-      .insert([{ login, nickname: login, avatar, is_online: true }])
+      .insert([{
+        login,
+        nickname: login,
+        avatar,
+        is_online: true,
+        telegram_id: telegramId || null,
+        telegram_photo_url: telegramPhotoUrl || null
+      }])
       .select()
       .single();
 
@@ -94,9 +110,12 @@ export class PlayerService {
 
     if (error) {
       console.error('Error checking login:', error);
-      return false;
+      // При ошибке считаем логин доступным, чтобы не блокировать вход
+      // Реальная проверка произойдет при создании игрока (уникальный индекс в БД)
+      return true;
     }
 
+    // Логин доступен, если не найдено ни одного игрока с таким логином
     return data.length === 0;
   }
 

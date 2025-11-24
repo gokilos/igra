@@ -9,6 +9,7 @@ import { BattleshipGrid } from './components/BattleshipGrid';
 import { ShipPlacer } from './components/ShipPlacer';
 import { CHARACTERS } from './data/characters';
 import { haptic } from './utils/haptic';
+import { telegram } from './utils/telegram';
 import {
   PlayerService,
   GameService,
@@ -391,8 +392,13 @@ const App: React.FC = () => {
       return;
     }
 
+    // Получаем данные из Telegram API если доступны
+    const telegramUser = telegram.getUser();
+    const telegramId = telegramUser?.id || null;
+    const telegramPhotoUrl = telegramUser?.photo_url || null;
+
     // Создать игрока с валидным аватаром (○, △, □), чтобы пройти CHECK-constraint
-    const player = await PlayerService.createPlayer(trimmedLogin, selectedAvatar);
+    const player = await PlayerService.createPlayer(trimmedLogin, selectedAvatar, telegramId, telegramPhotoUrl);
     if (player) {
       setCurrentPlayer(player);
       setCurrentScreen(AppScreen.GAME);
@@ -502,6 +508,12 @@ const App: React.FC = () => {
         // Creator starts the game
         await GameService.startGame(currentGame.id, currentPlayer.id);
       }
+
+      // Небольшая задержка перед сбросом флага для предотвращения двойных отправок
+      await new Promise(resolve => setTimeout(resolve, 300));
+    } catch (error) {
+      console.error('Error in handleSetupSubmit:', error);
+      haptic.error();
     } finally {
       setIsSubmitting(false);
     }
@@ -523,10 +535,16 @@ const App: React.FC = () => {
     try {
       // Get opponent's secret
       const game = await GameService.getGame(currentGame.id);
-      if (!game) return;
+      if (!game) {
+        console.error('Game not found');
+        throw new Error('Game not found');
+      }
 
       const targetSecret = isCreator ? game.opponent_secret : game.creator_secret;
-      if (!targetSecret) return;
+      if (!targetSecret) {
+        console.error('Target secret not found');
+        throw new Error('Target secret not found');
+      }
 
       const guess = currentInput;
       let matchCount = 0;
@@ -576,6 +594,13 @@ const App: React.FC = () => {
       }
 
       setCurrentInput('');
+
+      // Небольшая задержка перед сбросом флага для предотвращения двойных отправок
+      await new Promise(resolve => setTimeout(resolve, 300));
+    } catch (error) {
+      console.error('Error in handleSubmitGuess:', error);
+      haptic.error();
+      // При ошибке не очищаем ввод, чтобы пользователь мог повторить попытку
     } finally {
       setIsSubmitting(false);
     }
@@ -786,7 +811,10 @@ const App: React.FC = () => {
   };
 
   const handleStartGame = () => {
-    setCurrentScreen(AppScreen.CHARACTER_SELECT);
+    // Устанавливаем дефолтного персонажа и сразу переходим к логину
+    const defaultCharacter = CHARACTERS[0]; // Первый персонаж по умолчанию
+    setSelectedCharacter(defaultCharacter);
+    setCurrentScreen(AppScreen.LOGIN);
   };
 
   const handleCharacterSelect = (character: Character) => {
@@ -831,7 +859,8 @@ const App: React.FC = () => {
             target.style.display = 'none';
             // Показываем fallback - первую букву логина
             if (target.parentElement) {
-              target.parentElement.innerHTML = `<span class="text-sm font-bold">${(player.login || player.nickname || '?')[0].toUpperCase()}</span>`;
+              const letter = (player.login || player.nickname || '?')[0].toUpperCase();
+              target.parentElement.innerHTML = `<div class="w-full h-full rounded-full bg-gradient-to-br from-purple-600 to-blue-600 flex items-center justify-center"><span class="text-sm font-bold text-white">${letter}</span></div>`;
             }
           }}
         />
@@ -850,17 +879,19 @@ const App: React.FC = () => {
             const target = e.target as HTMLImageElement;
             target.style.display = 'none';
             if (target.parentElement) {
-              target.parentElement.innerHTML = `<span class="text-sm font-bold">${(player.login || player.nickname || '?')[0].toUpperCase()}</span>`;
+              const letter = (player.login || player.nickname || '?')[0].toUpperCase();
+              target.parentElement.innerHTML = `<div class="w-full h-full rounded-full bg-gradient-to-br from-purple-600 to-blue-600 flex items-center justify-center"><span class="text-sm font-bold text-white">${letter}</span></div>`;
             }
           }}
         />
       );
     }
 
-    // Fallback к символу аватара
+    // Fallback к первой букве логина вместо геометрических фигур
+    const letter = (player.login || player.nickname || '?')[0].toUpperCase();
     return (
-      <div className="w-full h-full rounded-full bg-gradient-to-br from-gray-700 to-gray-900 flex items-center justify-center">
-        <span className="text-lg">{player.avatar}</span>
+      <div className="w-full h-full rounded-full bg-gradient-to-br from-purple-600 to-blue-600 flex items-center justify-center">
+        <span className="text-lg font-bold text-white">{letter}</span>
       </div>
     );
   };
@@ -1098,7 +1129,7 @@ const App: React.FC = () => {
                       className="carousel-item flex-shrink-0 w-[85vw] max-w-md animate-slide-in"
                       style={{ animationDelay: `${index * 100}ms` }}
                     >
-                      <div className="game-card relative h-[420px] rounded-3xl overflow-hidden shadow-2xl">
+                      <div className="game-card relative h-[340px] rounded-3xl overflow-hidden shadow-2xl">
                         {/* Background Image Placeholder */}
                         <div
                           className="absolute inset-0 game-card-image"
@@ -1494,51 +1525,68 @@ const App: React.FC = () => {
 
     // Режим игры
     return (
-      <div className="h-screen flex flex-col bg-squid-dark">
+      <div className="h-screen flex flex-col bg-gradient-to-b from-gray-900 via-blue-950 to-gray-900">
+        {/* Уведомление как полоска наверху */}
+        {status === GameStatus.PLAYING && (
+          <div className={`sticky top-0 z-40 py-1.5 px-4 text-center text-xs font-bold transition-all ${
+            currentGame?.current_turn === currentPlayer?.id
+              ? 'bg-gradient-to-r from-green-500 to-emerald-600 text-white animate-pulse'
+              : 'bg-gradient-to-r from-orange-500 to-red-500 text-white'
+          }`}>
+            {feedback}
+          </div>
+        )}
+
         {/* Заголовок */}
-        <div className="sticky top-0 z-30 bg-squid-dark px-4 pt-3 pb-2 border-b border-gray-800">
+        <div className="sticky top-0 z-30 bg-gradient-to-b from-gray-900 to-gray-900/95 backdrop-blur-md px-4 pt-3 pb-2 border-b border-cyan-500/30 shadow-lg shadow-cyan-500/20">
           {status === GameStatus.PLAYING && (
-            <div className="mb-2">
-              <Timer
-                duration={TURN_DURATION}
-                onTimeUp={handleTimeUp}
-                isActive={true}
-                resetKey={timerResetKey}
-              />
+            <div className="mb-3 flex justify-center">
+              <div className="scale-75 origin-center">
+                <Timer
+                  duration={TURN_DURATION}
+                  onTimeUp={handleTimeUp}
+                  isActive={true}
+                  resetKey={timerResetKey}
+                />
+              </div>
             </div>
           )}
           <div className="flex justify-between items-center">
-            <div className="flex gap-2 items-center">
-              {getOpponentAvatar()}
-              <span className="text-sm text-gray-400">{getOpponentNickname()}</span>
+            <div className="flex gap-3 items-center bg-gradient-to-r from-cyan-900/30 to-blue-900/30 px-3 py-2 rounded-xl border border-cyan-500/20">
+              <div className="w-10 h-10 rounded-full overflow-hidden shadow-lg ring-2 ring-cyan-400/50">
+                {getOpponentAvatar()}
+              </div>
+              <div>
+                <div className="text-xs text-cyan-400 font-bold">{getOpponentNickname()}</div>
+                <div className="text-[10px] text-gray-500">ПРОТИВНИК</div>
+              </div>
             </div>
             <div className="flex items-center gap-3">
-              <div className="font-mono text-xs text-gray-400">
+              <div className="font-mono text-xs bg-gradient-to-r from-purple-900/30 to-pink-900/30 px-3 py-2 rounded-xl border border-purple-500/20">
                 {currentGame?.prize && <span className="text-yellow-400 mr-2">💰 {currentGame.prize}</span>}
-                РАУНД {currentGame?.turn_count || 0}
+                <span className="text-purple-400">РАУНД {currentGame?.turn_count || 0}</span>
               </div>
-              <button onClick={handleBackToLobby} className="text-xs text-red-500 font-bold hover:underline uppercase">
+              <button onClick={handleBackToLobby} className="text-xs text-red-400 font-bold hover:text-red-300 bg-red-900/30 px-3 py-2 rounded-xl border border-red-500/20 hover:bg-red-900/50 transition-all uppercase">
                 Выход
               </button>
             </div>
           </div>
         </div>
 
-        {/* Информация */}
-        <div className="sticky top-[57px] z-20 bg-squid-dark px-4 pb-2">
-          <div className="bg-squid-panel border-l-4 border-squid-pink p-2 mb-2 font-mono text-sm text-center shadow-lg text-white">
-            {feedback}
-          </div>
-        </div>
 
         {/* Игровые поля */}
         <div className="flex-1 overflow-auto p-4">
-          <div className="max-w-4xl mx-auto space-y-6">
+          <div className="max-w-5xl mx-auto space-y-6">
             {/* Поле оппонента (для стрельбы) */}
-            <div className="bg-squid-panel border border-gray-800 rounded p-4">
-              <h3 className="text-sm font-bold text-squid-pink mb-3 text-center">
-                ПОЛЕ ПРОТИВНИКА
-              </h3>
+            <div className="bg-gradient-to-br from-red-900/20 to-orange-900/20 border-2 border-red-500/30 rounded-2xl p-5 shadow-2xl shadow-red-500/20 backdrop-blur-sm">
+              <div className="flex items-center justify-center gap-3 mb-4">
+                <div className="w-8 h-8 rounded-full overflow-hidden shadow-lg ring-2 ring-red-400/50">
+                  {getOpponentAvatar()}
+                </div>
+                <h3 className="text-base font-bold text-red-400 uppercase tracking-wider">
+                  🎯 Поле противника - {getOpponentNickname()}
+                </h3>
+              </div>
               <div className="flex justify-center">
                 <BattleshipGrid
                   mode="playing"
@@ -1552,10 +1600,15 @@ const App: React.FC = () => {
             </div>
 
             {/* Моё поле */}
-            <div className="bg-squid-panel border border-gray-800 rounded p-4">
-              <h3 className="text-sm font-bold text-squid-green mb-3 text-center">
-                ВАШЕ ПОЛЕ
-              </h3>
+            <div className="bg-gradient-to-br from-cyan-900/20 to-blue-900/20 border-2 border-cyan-500/30 rounded-2xl p-5 shadow-2xl shadow-cyan-500/20 backdrop-blur-sm">
+              <div className="flex items-center justify-center gap-3 mb-4">
+                <div className="w-8 h-8 rounded-full overflow-hidden shadow-lg ring-2 ring-cyan-400/50">
+                  {currentPlayer && getPlayerAvatar(currentPlayer)}
+                </div>
+                <h3 className="text-base font-bold text-cyan-400 uppercase tracking-wider">
+                  🛡️ Ваше поле - {currentPlayer?.login || currentPlayer?.nickname}
+                </h3>
+              </div>
               <div className="flex justify-center">
                 <BattleshipGrid
                   mode="playing"
@@ -1639,11 +1692,15 @@ const App: React.FC = () => {
 
     return (
       <div className="h-screen flex flex-col mx-auto relative max-w-4xl bg-gradient-to-b from-gray-900 via-gray-800 to-gray-900">
-        {/* Sticky Header с таймером по центру */}
-        <div className="sticky top-0 z-30 bg-gradient-to-b from-gray-900 to-gray-900/95 backdrop-blur-md px-4 pt-4 pb-3 border-b border-gray-700/50">
-          {/* Timer at the very top */}
-          {status === GameStatus.PLAYING && (
-            <div className="mb-4">
+        {/* Уведомление как полоска наверху с таймером справа */}
+        {status === GameStatus.PLAYING && (
+          <div className={`sticky top-0 z-40 py-2 px-4 flex items-center justify-between text-xs font-bold transition-all ${
+            currentGame?.current_turn === currentPlayer?.id
+              ? 'bg-gradient-to-r from-green-500 to-emerald-600 text-white animate-pulse'
+              : 'bg-gradient-to-r from-orange-500 to-red-500 text-white'
+          }`}>
+            <div className="flex-1 text-center">{feedback}</div>
+            <div className="flex-shrink-0 ml-2 scale-50 origin-right">
               <Timer
                 duration={TURN_DURATION}
                 onTimeUp={handleTimeUp}
@@ -1651,7 +1708,11 @@ const App: React.FC = () => {
                 resetKey={timerResetKey}
               />
             </div>
-          )}
+          </div>
+        )}
+
+        {/* Sticky Header */}
+        <div className="sticky top-0 z-30 bg-gradient-to-b from-gray-900 to-gray-900/95 backdrop-blur-md px-4 pt-2 pb-2 border-b border-gray-700/50">
 
           {/* Два шейпа игроков - слева и справа */}
           <div className="grid grid-cols-2 gap-4 mb-3">
@@ -1665,7 +1726,10 @@ const App: React.FC = () => {
                   <div className="text-sm font-bold text-white truncate">
                     {currentPlayer?.login || currentPlayer?.nickname}
                   </div>
-                  <div className="text-xs text-blue-300">ВЫ</div>
+                  <div className="text-xs text-blue-300 flex items-center gap-1">
+                    <span>ВЫ</span>
+                    <span className="text-yellow-400">• {currentPlayer?.games_won || 0}🏆</span>
+                  </div>
                 </div>
               </div>
               {/* Мое загаданное слово */}
@@ -1703,7 +1767,14 @@ const App: React.FC = () => {
                   <div className="text-sm font-bold text-white truncate">
                     {getOpponentNickname()}
                   </div>
-                  <div className="text-xs text-pink-300">ОППОНЕНТ</div>
+                  <div className="text-xs text-pink-300 flex items-center gap-1">
+                    <span>ОППОНЕНТ</span>
+                    <span className="text-yellow-400">• {(() => {
+                      const opponentId = isCreator ? currentGame?.opponent_id : currentGame?.creator_id;
+                      const opponent = onlinePlayers.find(p => p.id === opponentId);
+                      return opponent?.games_won || 0;
+                    })()}🏆</span>
+                  </div>
                 </div>
               </div>
               {/* Блок оппонента с звездочками и открытыми буквами */}
@@ -1737,48 +1808,30 @@ const App: React.FC = () => {
           </div>
 
           {/* Кнопка выхода и раунд */}
-          <div className="flex justify-between items-center text-xs">
+          <div className="flex justify-between items-center text-xs mb-2 mt-2">
             <div className="font-mono text-gray-400">
               {currentGame?.prize && <span className="text-yellow-400 mr-2">💰 {currentGame.prize}</span>}
               РАУНД {currentGame?.turn_count || 0}
             </div>
-            <button onClick={handleBackToLobby} className="text-red-400 font-bold hover:text-red-300 uppercase">
+            <button onClick={handleBackToLobby} className="text-red-400 font-bold hover:text-red-300 uppercase text-[10px]">
               Выход
             </button>
           </div>
         </div>
 
-        {/* Панель статуса с пульсацией */}
-        <div className="sticky top-[200px] z-20 bg-gray-900/95 backdrop-blur-sm px-4 pb-2">
-          <div className={`p-3 rounded-xl font-bold text-sm text-center shadow-lg transition-all ${
-            status === GameStatus.PLAYING && isMyTurn
-              ? 'bg-gradient-to-r from-green-500 to-emerald-600 text-white animate-pulse shadow-green-500/50'
-              : status === GameStatus.PLAYING
-              ? 'bg-gradient-to-r from-orange-500 to-red-500 text-white shadow-orange-500/30'
-              : 'bg-gradient-to-r from-blue-500 to-purple-500 text-white shadow-blue-500/30'
-          }`}>
-            {feedback}
-          </div>
-
-          {/* My Secret Display - только для SETUP режима */}
-          {status === GameStatus.SETUP && (
-            <div className="mb-2 mt-3">
-              {renderSecretDisplay(true)}
+        {/* My Secret Display - только для SETUP режима */}
+        {status === GameStatus.SETUP && (
+          <div className="sticky top-0 z-20 bg-gray-900/95 backdrop-blur-sm px-4 pb-3 pt-3">
+            <div className="p-3 rounded-xl font-bold text-sm text-center bg-gradient-to-r from-blue-500 to-purple-500 text-white shadow-lg mb-3">
+              {feedback}
             </div>
-          )}
-        </div>
+            {renderSecretDisplay(true)}
+          </div>
+        )}
 
         {/* History - scrollable area with improved styling */}
         <div className="flex-1 px-4 pb-2 overflow-hidden">
-          <div className="h-full overflow-y-auto pb-4" ref={scrollRef} style={{ scrollBehavior: 'smooth' }}>
-          <div className="flex items-center justify-between mb-4 sticky top-0 bg-gradient-to-b from-gray-900 to-gray-900/90 backdrop-blur-md py-3 z-10 rounded-xl">
-            <h3 className="text-sm font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-400 uppercase tracking-wider">
-              📊 История ходов
-            </h3>
-            <span className="text-xs text-gray-500 font-mono px-3 py-1 bg-gray-800/50 rounded-full">
-              {guesses.length}
-            </span>
-          </div>
+          <div className="h-full overflow-y-auto pb-4" ref={scrollRef} style={{ scrollBehavior: 'smooth', touchAction: 'manipulation' }}>
           {guesses.length === 0 ? (
             <div className="text-center text-gray-500 text-sm py-12">
               <div className="text-6xl mb-4 opacity-20">🎯</div>
@@ -1794,7 +1847,7 @@ const App: React.FC = () => {
                 return (
                   <div
                     key={guess.id || idx}
-                    className={`rounded-xl p-3 border-2 transition-all transform hover:scale-[1.02] ${
+                    className={`rounded-xl p-3 border-2 transition-colors ${
                       isMine
                         ? 'bg-gradient-to-br from-blue-600/10 to-purple-600/10 border-blue-500/40 shadow-lg shadow-blue-500/10'
                         : 'bg-gradient-to-br from-pink-600/10 to-orange-600/10 border-pink-500/40 shadow-lg shadow-pink-500/10'
